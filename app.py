@@ -52,7 +52,7 @@ st.sidebar.divider()
 st.sidebar.header("⚙️ Parameter")
 timestep = st.sidebar.number_input("Timestep", min_value=1, max_value=30, value=5)
 particles = st.sidebar.number_input("Jumlah Partikel", min_value=10, value=30)
-iterasi = st.sidebar.number_input("Jumlah Iterasi", min_value=5, value=10)
+iterasi = st.sidebar.number_input("Jumlah Iterasi", min_value=1, value=10)
 epochs_pso = st.sidebar.number_input("Epoch PSO", min_value=5, value=10)
 epochs_final = st.sidebar.number_input("Epoch Final", min_value=20, value=100)
 
