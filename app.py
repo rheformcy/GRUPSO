@@ -25,7 +25,7 @@ Statistika Universitas Diponegoro
 st.divider()
 
 # ======================================================
-# SIDEBAR - UPLOAD
+# SIDEBAR - UPLOAD DATASET
 # ======================================================
 st.sidebar.header("📂 Upload Dataset")
 
@@ -157,18 +157,43 @@ dropout_max = st.sidebar.slider(
 )
 
 # ======================================================
-# MAIN PAGE
+# MAIN PROGRAM
 # ======================================================
 if uploaded_file is not None:
 
     try:
 
         # ==================================================
-        # LOAD DATA
+        # MEMBACA FILE EXCEL
         # ==================================================
         df = pd.read_excel(uploaded_file)
 
+        # ==================================================
+        # MEMBERSIHKAN NAMA KOLOM
+        # ==================================================
         df.columns = df.columns.str.strip()
+
+        # ==================================================
+        # MEMBERSIHKAN MISSING VALUE PALSU
+        # ==================================================
+        df = df.replace(
+            r'^\s*$',
+            pd.NA,
+            regex=True
+        )
+
+        df.replace(
+            ["-", "?", "null", "NULL"],
+            pd.NA,
+            inplace=True
+        )
+
+        # ==================================================
+        # SUCCESS MESSAGE
+        # ==================================================
+        st.success(
+            "✅ Dataset berhasil diupload!"
+        )
 
         # ==================================================
         # TABS
@@ -181,7 +206,7 @@ if uploaded_file is not None:
         ])
 
         # ==================================================
-        # TAB 1 - PREVIEW
+        # TAB 1 - PREVIEW DATASET
         # ==================================================
         with tab1:
 
@@ -192,36 +217,74 @@ if uploaded_file is not None:
                 use_container_width=True
             )
 
-            st.write(f"Jumlah Baris : {df.shape[0]}")
-            st.write(f"Jumlah Kolom : {df.shape[1]}")
+            # ==============================================
+            # INFORMASI DATASET
+            # ==============================================
+            col1, col2 = st.columns(2)
+
+            col1.metric(
+                "Jumlah Baris",
+                df.shape[0]
+            )
+
+            col2.metric(
+                "Jumlah Kolom",
+                df.shape[1]
+            )
+
+            # ==============================================
+            # NAMA KOLOM
+            # ==============================================
+            st.subheader("📌 Nama Kolom")
+
+            st.write(
+                df.columns.tolist()
+            )
 
         # ==================================================
-        # TAB 2 - DESKRIPTIF
+        # TAB 2 - STATISTIK DATA
         # ==================================================
         with tab2:
 
-            st.subheader("📊 Statistik Deskriptif")
+            st.subheader(
+                "📊 Statistik Deskriptif"
+            )
 
             numeric_df = df.select_dtypes(
                 include=['int64', 'float64']
             )
 
-            st.dataframe(
-                numeric_df.describe(),
-                use_container_width=True
-            )
+            if numeric_df.shape[1] > 0:
+
+                st.dataframe(
+                    numeric_df.describe(),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.warning(
+                    "Tidak ada kolom numerik."
+                )
 
         # ==================================================
         # TAB 3 - VISUALISASI
         # ==================================================
         with tab3:
 
-            st.subheader("📈 Visualisasi Time Series")
+            st.subheader(
+                "📈 Visualisasi Time Series"
+            )
 
             if (
                 "Tanggal" in df.columns and
                 "Terakhir" in df.columns
             ):
+
+                df["Tanggal"] = pd.to_datetime(
+                    df["Tanggal"],
+                    errors='coerce'
+                )
 
                 st.line_chart(
                     data=df,
@@ -238,16 +301,20 @@ if uploaded_file is not None:
                 )
 
         # ==================================================
-        # TAB 4 - GRU PSO
+        # TAB 4 - OPTIMASI GRU PSO
         # ==================================================
         with tab4:
 
-            st.subheader("🚀 Optimasi GRU-PSO")
+            st.subheader(
+                "🚀 Optimasi GRU-PSO"
+            )
 
             # ==============================================
-            # INFO PARAMETER
+            # RINGKASAN PARAMETER
             # ==============================================
-            st.markdown("### ⚙️ Parameter Model")
+            st.markdown(
+                "### ⚙️ Parameter Model"
+            )
 
             col1, col2, col3 = st.columns(3)
 
@@ -268,7 +335,9 @@ if uploaded_file is not None:
 
             st.divider()
 
-            st.markdown("### 🚀 Parameter PSO")
+            st.markdown(
+                "### 🚀 Parameter PSO"
+            )
 
             col4, col5 = st.columns(2)
 
@@ -324,14 +393,23 @@ if uploaded_file is not None:
                 # ==========================================
                 # PLACEHOLDER HASIL
                 # ==========================================
-                st.subheader("🏆 Best Hyperparameter")
+                st.subheader(
+                    "🏆 Best Hyperparameter"
+                )
 
                 dummy_result = pd.DataFrame({
 
-                    "Units": [64],
-                    "Learning Rate": [0.0012],
-                    "Batch Size": [32],
-                    "Dropout": [0.2]
+                    "Units":
+                    [64],
+
+                    "Learning Rate":
+                    [0.0012],
+
+                    "Batch Size":
+                    [32],
+
+                    "Dropout":
+                    [0.2]
 
                 })
 
@@ -343,7 +421,9 @@ if uploaded_file is not None:
                 # ==========================================
                 # METRICS PLACEHOLDER
                 # ==========================================
-                st.subheader("📊 Evaluasi Model")
+                st.subheader(
+                    "📊 Evaluasi Model"
+                )
 
                 m1, m2, m3 = st.columns(3)
 
