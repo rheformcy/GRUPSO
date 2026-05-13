@@ -3,20 +3,18 @@
 # =========================================================
 import os
 
+# =========================================================
+# REPRODUCIBILITY
+# =========================================================
 os.environ["PYTHONHASHSEED"] = "49"
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
-os.environ["CUDA_VISIBLE_DEVICE"] = "-1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-
-tf.keras.utils.set_random_seed(49)
-tf.config.experimental.enable_op_determinism()
-
-
 import random
 import gc
 
@@ -44,7 +42,7 @@ from tensorflow.keras.backend import clear_session
 from pyswarms.single.global_best import GlobalBestPSO
 
 # =========================================================
-# SEED
+# FIX RANDOMNESS
 # =========================================================
 SEED = 49
 
@@ -52,6 +50,11 @@ random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 tf.keras.utils.set_random_seed(SEED)
+
+tf.config.experimental.enable_op_determinism()
+
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
 
 # =========================================================
 # STREAMLIT CONFIG
@@ -310,15 +313,9 @@ if uploaded_file is not None:
 
         else:
 
-            # =================================================
-            # CLEAR SESSION
-            # =================================================
             clear_session()
             gc.collect()
 
-            # =================================================
-            # STATUS
-            # =================================================
             status_text = st.empty()
 
             progress_bar = st.progress(0)
@@ -331,10 +328,10 @@ if uploaded_file is not None:
             feature_cols = ["Terakhir"]
             target_col = "Terakhir"
 
-            data_features = df[feature_cols].values
-            data_target = df[[target_col]].values
+            data_features = df[feature_cols].values.astype(float)
+            data_target = df[[target_col]].values.astype(float)
 
-            values = df[['Terakhir']].values
+            values = df[['Terakhir']].values.astype(float)
 
             n = len(values)
 
@@ -351,13 +348,8 @@ if uploaded_file is not None:
                 data_target[:n_train]
             )
 
-            Xs = scaler_X.transform(
-                data_features
-            )
-
-            ys = scaler_y.transform(
-                data_target
-            )
+            Xs = scaler_X.transform(data_features)
+            ys = scaler_y.transform(data_target)
 
             # =================================================
             # WINDOWING
@@ -471,29 +463,19 @@ if uploaded_file is not None:
 
                     try:
 
-                        units = int(
-                            np.round(
-                                particle_i[0]
-                            )
+                        units = max(
+                            1,
+                            int(np.round(particle_i[0]))
                         )
 
-                        lr = float(
-                            particle_i[1]
+                        lr = float(particle_i[1])
+
+                        batch = max(
+                            1,
+                            int(np.round(particle_i[2]))
                         )
 
-                        batch = int(
-                            np.round(
-                                particle_i[2]
-                            )
-                        )
-
-                        dropout = float(
-                            particle_i[3]
-                        )
-
-                        units = max(1, units)
-
-                        batch = max(1, batch)
+                        dropout = float(particle_i[3])
 
                         clear_session()
 
@@ -535,7 +517,7 @@ if uploaded_file is not None:
                             epochs=epochs_pso,
                             batch_size=batch,
                             verbose=0,
-                            =False
+                            shuffle=False
                         )
 
                         pred = model.predict(
@@ -594,21 +576,19 @@ if uploaded_file is not None:
             # =================================================
             # BEST PARAMETER
             # =================================================
-            best_units = int(
-                np.round(best_pos[0])
+            best_units = max(
+                1,
+                int(np.round(best_pos[0]))
             )
 
-            best_lr = float(
-                best_pos[1]
+            best_lr = float(best_pos[1])
+
+            best_batch = max(
+                1,
+                int(np.round(best_pos[2]))
             )
 
-            best_batch = int(
-                np.round(best_pos[2])
-            )
-
-            best_dropout = float(
-                best_pos[3]
-            )
+            best_dropout = float(best_pos[3])
 
             # =================================================
             # FINAL MODEL
@@ -655,7 +635,7 @@ if uploaded_file is not None:
                 batch_size=best_batch,
                 validation_split=0.2,
                 verbose=1,
-                =False
+                shuffle=False
             )
 
             progress_bar.progress(100)
