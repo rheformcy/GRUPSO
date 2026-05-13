@@ -5,13 +5,18 @@ import os
 
 os.environ["PYTHONHASHSEED"] = "49"
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
-os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["CUDA_VISIBLE_DEVICE"] = "-1"
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+
+tf.keras.utils.set_random_seed(49)
+tf.config.experimental.enable_op_determinism()
+
+
 import random
 import gc
 
@@ -530,7 +535,7 @@ if uploaded_file is not None:
                             epochs=epochs_pso,
                             batch_size=batch,
                             verbose=0,
-                            shuffle=False
+                            =False
                         )
 
                         pred = model.predict(
@@ -650,7 +655,7 @@ if uploaded_file is not None:
                 batch_size=best_batch,
                 validation_split=0.2,
                 verbose=1,
-                shuffle=False
+                =False
             )
 
             progress_bar.progress(100)
