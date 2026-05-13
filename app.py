@@ -33,6 +33,7 @@ from tensorflow.keras.layers import (
 )
 
 from tensorflow.keras.optimizers import Adam
+
 from tensorflow.keras.backend import clear_session
 
 from pyswarms.single.global_best import GlobalBestPSO
@@ -79,11 +80,11 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx", "xls"]
 )
 
-st.sidebar.divider()
-
 # =========================================================
 # PARAMETER
 # =========================================================
+st.sidebar.divider()
+
 st.sidebar.header("⚙️ Parameter")
 
 timestep = st.sidebar.number_input(
@@ -96,25 +97,25 @@ timestep = st.sidebar.number_input(
 particles = st.sidebar.number_input(
     "Jumlah Partikel",
     min_value=1,
-    value=2
+    value=5
 )
 
 iterasi = st.sidebar.number_input(
     "Jumlah Iterasi",
     min_value=1,
-    value=1
+    value=3
 )
 
 epochs_pso = st.sidebar.number_input(
     "Epoch PSO",
     min_value=1,
-    value=1
+    value=5
 )
 
 epochs_final = st.sidebar.number_input(
     "Epoch Final",
     min_value=1,
-    value=5
+    value=50
 )
 
 # =========================================================
@@ -153,29 +154,27 @@ lr_max = st.sidebar.number_input(
 batch_min = st.sidebar.number_input(
     "Batch Size Min",
     min_value=1,
-    value=16
+    value=8
 )
 
 batch_max = st.sidebar.number_input(
     "Batch Size Max",
     min_value=1,
-    value=128
+    value=64
 )
 
 dropout_min = st.sidebar.slider(
     "Dropout Min",
-    min_value=0.0,
-    max_value=0.9,
-    value=0.1,
-    step=0.1
+    0.0,
+    0.9,
+    0.1
 )
 
 dropout_max = st.sidebar.slider(
     "Dropout Max",
-    min_value=0.0,
-    max_value=0.9,
-    value=0.5,
-    step=0.1
+    0.0,
+    0.9,
+    0.5
 )
 
 # =========================================================
@@ -225,7 +224,7 @@ if uploaded_file is not None:
     # =====================================================
     # MISSING VALUE
     # =====================================================
-    st.subheader("🧩 Missing Values")
+    st.subheader("🧩 Missing Value")
 
     missing_df = pd.DataFrame({
         "Kolom": df.columns,
@@ -254,15 +253,15 @@ if uploaded_file is not None:
 
         IQR = Q3 - Q1
 
-        lower = Q1 - 1.5 * IQR
-        upper = Q3 + 1.5 * IQR
+        lower = Q1 - (1.5 * IQR)
+        upper = Q3 + (1.5 * IQR)
 
         outliers = df[
             (df["Terakhir"] < lower) |
             (df["Terakhir"] > upper)
         ]
 
-        st.write(f"Jumlah Outlier: {len(outliers)}")
+        st.write(f"Jumlah Outlier : {len(outliers)}")
 
         st.dataframe(
             outliers,
@@ -297,7 +296,7 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
     # =====================================================
-    # START OPTIMIZATION
+    # START
     # =====================================================
     if start_button:
 
@@ -325,11 +324,17 @@ if uploaded_file is not None:
             # =================================================
             # PREPROCESSING
             # =================================================
-            status_text.write("⚙️ Preprocessing Data...")
+            status_text.write(
+                "⚙️ Preprocessing data..."
+            )
 
-            values = df[['Terakhir']].values.astype(float)
+            feature_cols = ["Terakhir"]
+            target_col = "Terakhir"
 
-            n = len(values)
+            data_features = df[feature_cols].values
+            data_target = df[[target_col]].values
+
+            n = len(data_features)
 
             n_train = int(n * 0.8)
 
@@ -337,15 +342,16 @@ if uploaded_file is not None:
             # SCALING
             # =================================================
             scaler_X = MinMaxScaler().fit(
-                values[:n_train]
+                data_features[:n_train]
             )
 
             scaler_y = MinMaxScaler().fit(
-                values[:n_train]
+                data_target[:n_train]
             )
 
-            Xs = scaler_X.transform(values)
-            ys = scaler_y.transform(values)
+            Xs = scaler_X.transform(data_features)
+
+            ys = scaler_y.transform(data_target)
 
             # =================================================
             # WINDOWING
@@ -405,7 +411,7 @@ if uploaded_file is not None:
             )
 
             # =================================================
-            # VALIDATION
+            # VALIDATION SPLIT MANUAL
             # =================================================
             val_size = 0.2
 
@@ -423,9 +429,9 @@ if uploaded_file is not None:
             # PSO CONFIG
             # =================================================
             options = {
-                'c1': 2.0,
-                'c2': 2.0,
-                'w': 0.7
+                "c1": 2.0,
+                "c2": 2.0,
+                "w": 0.7
             }
 
             bounds = (
@@ -460,9 +466,7 @@ if uploaded_file is not None:
                     try:
 
                         units = int(
-                            np.round(
-                                particle_i[0]
-                            )
+                            np.round(particle_i[0])
                         )
 
                         lr = float(
@@ -470,9 +474,7 @@ if uploaded_file is not None:
                         )
 
                         batch = int(
-                            np.round(
-                                particle_i[2]
-                            )
+                            np.round(particle_i[2])
                         )
 
                         dropout = float(
@@ -500,7 +502,7 @@ if uploaded_file is not None:
 
                             GRU(
                                 units=units,
-                                activation='tanh'
+                                activation="tanh"
                             ),
 
                             Dropout(dropout),
@@ -513,9 +515,12 @@ if uploaded_file is not None:
                             optimizer=Adam(
                                 learning_rate=lr
                             ),
-                            loss='mse'
+                            loss="mse"
                         )
 
+                        # =============================
+                        # TRAIN
+                        # =============================
                         model.fit(
                             X_tr,
                             y_tr,
@@ -557,7 +562,7 @@ if uploaded_file is not None:
                 return losses
 
             # =================================================
-            # PSO OPTIMIZER
+            # OPTIMIZER
             # =================================================
             status_text.write(
                 "🚀 Menjalankan PSO..."
@@ -585,9 +590,7 @@ if uploaded_file is not None:
                 np.round(best_pos[0])
             )
 
-            best_lr = float(
-                best_pos[1]
-            )
+            best_lr = float(best_pos[1])
 
             best_batch = int(
                 np.round(best_pos[2])
@@ -598,10 +601,10 @@ if uploaded_file is not None:
             )
 
             # =================================================
-            # FINAL MODEL
+            # FINAL TRAINING
             # =================================================
             status_text.write(
-                "🤖 Training Final Model..."
+                "🤖 Training final model..."
             )
 
             clear_session()
@@ -619,7 +622,7 @@ if uploaded_file is not None:
 
                 GRU(
                     units=best_units,
-                    activation='tanh'
+                    activation="tanh"
                 ),
 
                 Dropout(best_dropout),
@@ -632,15 +635,15 @@ if uploaded_file is not None:
                 optimizer=Adam(
                     learning_rate=best_lr
                 ),
-                loss='mse'
+                loss="mse"
             )
 
             history = model_final.fit(
-                X_train,
-                y_train,
+                X_tr,
+                y_tr,
+                validation_data=(X_val, y_val),
                 epochs=epochs_final,
                 batch_size=best_batch,
-                validation_split=0.2,
                 verbose=1,
                 shuffle=False
             )
@@ -651,7 +654,7 @@ if uploaded_file is not None:
             # PREDICTION
             # =================================================
             status_text.write(
-                "📊 Evaluasi Model..."
+                "📊 Evaluasi model..."
             )
 
             y_pred_scaled = model_final.predict(
@@ -690,7 +693,7 @@ if uploaded_file is not None:
             )
 
             # =================================================
-            # BEST PARAMETER TABLE
+            # BEST PARAMETER
             # =================================================
             st.subheader(
                 "🏆 Best Hyperparameter"
@@ -750,7 +753,7 @@ if uploaded_file is not None:
 
             ax2.plot(
                 optimizer.cost_history,
-                marker='o'
+                marker="o"
             )
 
             ax2.set_xlabel("Iterasi")
@@ -762,7 +765,7 @@ if uploaded_file is not None:
             st.pyplot(fig2)
 
             # =================================================
-            # LOSS
+            # TRAINING LOSS
             # =================================================
             st.subheader(
                 "📉 Training Loss"
@@ -773,13 +776,13 @@ if uploaded_file is not None:
             )
 
             ax3.plot(
-                history.history['loss'],
-                label='Training Loss'
+                history.history["loss"],
+                label="Training Loss"
             )
 
             ax3.plot(
-                history.history['val_loss'],
-                label='Validation Loss'
+                history.history["val_loss"],
+                label="Validation Loss"
             )
 
             ax3.legend()
@@ -801,12 +804,12 @@ if uploaded_file is not None:
 
             ax4.plot(
                 y_actual,
-                label='Aktual'
+                label="Aktual"
             )
 
             ax4.plot(
                 y_pred,
-                label='Prediksi'
+                label="Prediksi"
             )
 
             ax4.legend()
@@ -814,6 +817,31 @@ if uploaded_file is not None:
             ax4.grid(alpha=0.3)
 
             st.pyplot(fig4)
+
+            # =================================================
+            # RESULT TABLE
+            # =================================================
+            result_df = pd.DataFrame({
+
+                "RMSE":
+                [rmse],
+
+                "MAE":
+                [mae],
+
+                "MAPE":
+                [mape]
+
+            })
+
+            st.subheader(
+                "📋 Hasil Evaluasi"
+            )
+
+            st.dataframe(
+                result_df,
+                use_container_width=True
+            )
 
             st.success(
                 "✅ Optimasi GRU-PSO selesai!"
