@@ -1,3 +1,9 @@
+import os
+
+os.environ['PYTHONHASHSEED'] = '49'
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+tf.keras.utils.set_random_seed(49)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
