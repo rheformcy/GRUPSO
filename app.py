@@ -3,9 +3,6 @@
 # =========================================================
 import os
 
-# =========================================================
-# REPRODUCIBILITY
-# =========================================================
 os.environ["PYTHONHASHSEED"] = "49"
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -36,13 +33,12 @@ from tensorflow.keras.layers import (
 )
 
 from tensorflow.keras.optimizers import Adam
-
 from tensorflow.keras.backend import clear_session
 
 from pyswarms.single.global_best import GlobalBestPSO
 
 # =========================================================
-# FIX RANDOMNESS
+# SEED
 # =========================================================
 SEED = 49
 
@@ -50,11 +46,6 @@ random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 tf.keras.utils.set_random_seed(SEED)
-
-tf.config.experimental.enable_op_determinism()
-
-tf.config.threading.set_inter_op_parallelism_threads(1)
-tf.config.threading.set_intra_op_parallelism_threads(1)
 
 # =========================================================
 # STREAMLIT CONFIG
@@ -253,6 +244,11 @@ if uploaded_file is not None:
 
     if "Terakhir" in df.columns:
 
+        df["Terakhir"] = pd.to_numeric(
+            df["Terakhir"],
+            errors="coerce"
+        )
+
         Q1 = df["Terakhir"].quantile(0.25)
         Q3 = df["Terakhir"].quantile(0.75)
 
@@ -313,9 +309,15 @@ if uploaded_file is not None:
 
         else:
 
+            # =================================================
+            # CLEAR SESSION
+            # =================================================
             clear_session()
             gc.collect()
 
+            # =================================================
+            # STATUS
+            # =================================================
             status_text = st.empty()
 
             progress_bar = st.progress(0)
@@ -324,12 +326,6 @@ if uploaded_file is not None:
             # PREPROCESSING
             # =================================================
             status_text.write("⚙️ Preprocessing Data...")
-
-            feature_cols = ["Terakhir"]
-            target_col = "Terakhir"
-
-            data_features = df[feature_cols].values.astype(float)
-            data_target = df[[target_col]].values.astype(float)
 
             values = df[['Terakhir']].values.astype(float)
 
@@ -341,15 +337,15 @@ if uploaded_file is not None:
             # SCALING
             # =================================================
             scaler_X = MinMaxScaler().fit(
-                data_features[:n_train]
+                values[:n_train]
             )
 
             scaler_y = MinMaxScaler().fit(
-                data_target[:n_train]
+                values[:n_train]
             )
 
-            Xs = scaler_X.transform(data_features)
-            ys = scaler_y.transform(data_target)
+            Xs = scaler_X.transform(values)
+            ys = scaler_y.transform(values)
 
             # =================================================
             # WINDOWING
@@ -463,19 +459,28 @@ if uploaded_file is not None:
 
                     try:
 
-                        units = max(
-                            1,
-                            int(np.round(particle_i[0]))
+                        units = int(
+                            np.round(
+                                particle_i[0]
+                            )
                         )
 
-                        lr = float(particle_i[1])
-
-                        batch = max(
-                            1,
-                            int(np.round(particle_i[2]))
+                        lr = float(
+                            particle_i[1]
                         )
 
-                        dropout = float(particle_i[3])
+                        batch = int(
+                            np.round(
+                                particle_i[2]
+                            )
+                        )
+
+                        dropout = float(
+                            particle_i[3]
+                        )
+
+                        units = max(1, units)
+                        batch = max(1, batch)
 
                         clear_session()
 
@@ -576,19 +581,21 @@ if uploaded_file is not None:
             # =================================================
             # BEST PARAMETER
             # =================================================
-            best_units = max(
-                1,
-                int(np.round(best_pos[0]))
+            best_units = int(
+                np.round(best_pos[0])
             )
 
-            best_lr = float(best_pos[1])
-
-            best_batch = max(
-                1,
-                int(np.round(best_pos[2]))
+            best_lr = float(
+                best_pos[1]
             )
 
-            best_dropout = float(best_pos[3])
+            best_batch = int(
+                np.round(best_pos[2])
+            )
+
+            best_dropout = float(
+                best_pos[3]
+            )
 
             # =================================================
             # FINAL MODEL
