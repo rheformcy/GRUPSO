@@ -1,3 +1,10 @@
+import os
+
+os.environ['PYTHONHASHSEED'] = '49'
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+tf.keras.utils.set_random_seed(49)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,6 +12,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import random
 import gc
+import keras
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import GRU, Dense, Dropout, Input
@@ -325,10 +333,11 @@ if uploaded_file is not None:
         # SET SEED
         # =================================================
         SEED = 49
-
+        
         random.seed(SEED)
         np.random.seed(SEED)
         tf.random.set_seed(SEED)
+        tf.keras.utils.set_random_seed(49)
 
         # =================================================
         # VALIDATION SPLIT
@@ -727,18 +736,18 @@ if uploaded_file is not None:
         )
 
         history = model_final.fit(
-
-            X_train,
-            y_train,
-
+        
+            X_tr,
+            y_tr,
+        
+            validation_data=(X_val, y_val),
+        
             epochs=epochs_final,
-
+        
             batch_size=best_batch,
-
-            validation_split=0.2,
-
+        
             verbose=1,
-
+        
             shuffle=False
         )
 
