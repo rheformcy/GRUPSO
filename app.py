@@ -5,7 +5,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 import tensorflow as tf
 import random
 import gc
@@ -36,22 +35,22 @@ st.set_page_config(
 
 st.title("📈 Prediksi Harga Emas Menggunakan GRU-PSO")
 
+# =========================================================
+# SESSION STATE
+# =========================================================
 if "running" not in st.session_state:
     st.session_state.running = False
-if submit_button:
-    st.session_state.running = True
-if st.session_state.running:
 
 # =========================================================
-# SIDEBAR
+# SIDEBAR FORM
 # =========================================================
 with st.sidebar.form("form_pso"):
 
     st.header("⚙️ Pengaturan Model")
 
-    # -----------------------------
-    # Hyperparameter PSO
-    # -----------------------------
+    # =====================================================
+    # HYPERPARAMETER PSO
+    # =====================================================
     particles = st.number_input(
         "Jumlah Partikel",
         min_value=5,
@@ -80,9 +79,9 @@ with st.sidebar.form("form_pso"):
         value=50
     )
 
-    # -----------------------------
-    # Bound Hyperparameter
-    # -----------------------------
+    # =====================================================
+    # BOUND HYPERPARAMETER
+    # =====================================================
     st.subheader("Bound Hyperparameter")
 
     units_min = st.number_input(
@@ -127,12 +126,21 @@ with st.sidebar.form("form_pso"):
         value=0.5
     )
 
+    # =====================================================
+    # SUBMIT BUTTON
+    # =====================================================
     submit_button = st.form_submit_button(
         "🚀 Jalankan GRU-PSO"
     )
 
 # =========================================================
-# UPLOAD FILE
+# START PROCESS
+# =========================================================
+if submit_button:
+    st.session_state.running = True
+
+# =========================================================
+# FILE UPLOADER
 # =========================================================
 uploaded_file = st.file_uploader(
     "📂 Upload Dataset Excel",
@@ -167,7 +175,7 @@ if uploaded_file is not None:
     df = df.dropna().reset_index(drop=True)
 
     # =====================================================
-    # TAMPILKAN DATA
+    # DATA PREVIEW
     # =====================================================
     st.subheader("📋 Dataset")
 
@@ -200,9 +208,6 @@ if uploaded_file is not None:
     n = len(values)
 
     n_train = int(n * 0.8)
-
-    train_values = values[:n_train]
-    test_values = values[n_train:]
 
     scaler_X = MinMaxScaler().fit(
         data_features[:n_train]
@@ -296,9 +301,9 @@ if uploaded_file is not None:
         st.pyplot(fig_pacf)
 
     # =====================================================
-    # BUTTON RUN MODEL
+    # RUN MODEL
     # =====================================================
-    if submit_button:
+    if st.session_state.running:
 
         # =================================================
         # SET SEED
@@ -348,9 +353,6 @@ if uploaded_file is not None:
 
                     clear_session()
 
-                    # =====================================
-                    # MODEL GRU
-                    # =====================================
                     model = Sequential([
 
                         Input(
@@ -370,9 +372,6 @@ if uploaded_file is not None:
                         Dense(1)
                     ])
 
-                    # =====================================
-                    # COMPILE
-                    # =====================================
                     model.compile(
                         optimizer=Adam(
                             learning_rate=lr
@@ -380,9 +379,6 @@ if uploaded_file is not None:
                         loss='mse'
                     )
 
-                    # =====================================
-                    # TRAIN
-                    # =====================================
                     model.fit(
                         X_tr,
                         y_tr,
@@ -392,17 +388,11 @@ if uploaded_file is not None:
                         shuffle=False
                     )
 
-                    # =====================================
-                    # PREDIKSI VALIDASI
-                    # =====================================
                     y_val_pred = model.predict(
                         X_val,
                         verbose=0
                     )
 
-                    # =====================================
-                    # INVERSE SCALING
-                    # =====================================
                     y_val_pred_inv = scaler_y.inverse_transform(
                         y_val_pred
                     ).flatten()
@@ -411,9 +401,6 @@ if uploaded_file is not None:
                         y_val.reshape(-1, 1)
                     ).flatten()
 
-                    # =====================================
-                    # FITNESS
-                    # =====================================
                     losses[i] = mean_squared_error(
                         y_val_true_inv,
                         y_val_pred_inv
@@ -470,20 +457,16 @@ if uploaded_file is not None:
         best_dropout = float(best_pos[3])
 
         # =================================================
-        # TAMPILKAN BEST PARAMETER
+        # TAMPILKAN PARAMETER
         # =================================================
         st.subheader("🏆 Best Hyperparameter")
 
         st.dataframe(pd.DataFrame({
 
             "Units": [best_units],
-
             "Learning Rate": [best_lr],
-
             "Batch Size": [best_batch],
-
             "Dropout": [best_dropout],
-
             "Best MSE": [best_cost]
 
         }))
@@ -502,9 +485,7 @@ if uploaded_file is not None:
         )
 
         ax_conv.set_xlabel("Iterasi")
-
         ax_conv.set_ylabel("Global Best Loss")
-
         ax_conv.set_title("Konvergensi PSO")
 
         ax_conv.grid(True)
@@ -601,20 +582,9 @@ if uploaded_file is not None:
 
         col1, col2, col3 = st.columns(3)
 
-        col1.metric(
-            "RMSE",
-            f"{rmse:,.2f}"
-        )
-
-        col2.metric(
-            "MAE",
-            f"{mae:,.2f}"
-        )
-
-        col3.metric(
-            "MAPE",
-            f"{mape:.4f}%"
-        )
+        col1.metric("RMSE", f"{rmse:,.2f}")
+        col2.metric("MAE", f"{mae:,.2f}")
+        col3.metric("MAPE", f"{mape:.4f}%")
 
         # =================================================
         # GRAFIK LOSS
@@ -664,3 +634,8 @@ if uploaded_file is not None:
         ax_pred.grid(True)
 
         st.pyplot(fig_pred)
+
+        # =================================================
+        # STOP PROCESS
+        # =================================================
+        st.session_state.running = False
