@@ -73,12 +73,6 @@ pada model GRU.
 """)
 
 # =========================================================
-# SESSION
-# =========================================================
-if "running" not in st.session_state:
-    st.session_state.running = False
-
-# =========================================================
 # SIDEBAR
 # =========================================================
 with st.sidebar.form("form_pso"):
@@ -164,15 +158,9 @@ with st.sidebar.form("form_pso"):
         value=0.5
     )
 
-    submit_button = st.form_submit_button(
+    run_model = st.form_submit_button(
         "🚀 Jalankan GRU-PSO"
     )
-
-# =========================================================
-# RUN
-# =========================================================
-if submit_button:
-    st.session_state.running = True
 
 # =========================================================
 # FILE UPLOADER
@@ -241,110 +229,6 @@ if uploaded_file is not None:
     st.pyplot(fig_data)
 
     # =====================================================
-    # TRAIN TEST SPLIT DULU
-    # =====================================================
-    values = df[["Terakhir"]].values
-
-    n = len(values)
-
-    n_train = int(n * 0.8)
-
-    train_data = values[:n_train]
-    test_data = values[n_train:]
-
-    # =====================================================
-    # SCALING BENAR
-    # FIT HANYA TRAIN
-    # =====================================================
-    scaler = MinMaxScaler()
-
-    scaler.fit(train_data)
-
-    train_scaled = scaler.transform(train_data)
-
-    test_scaled = scaler.transform(test_data)
-
-    # =====================================================
-    # GABUNG LAGI
-    # =====================================================
-    all_scaled = np.concatenate([
-        train_scaled,
-        test_scaled
-    ])
-
-    # =====================================================
-    # WINDOWING
-    # =====================================================
-    def make_sequences(data, window):
-
-        X = []
-        y = []
-
-        for i in range(window, len(data)):
-
-            X.append(
-                data[i-window:i]
-            )
-
-            y.append(
-                data[i]
-            )
-
-        return np.array(X), np.array(y)
-
-    X_all, y_all = make_sequences(
-        all_scaled,
-        timestep
-    )
-
-    # =====================================================
-    # SPLIT SEQUENCE
-    # =====================================================
-    train_end = n_train - timestep
-
-    X_train = X_all[:train_end]
-    y_train = y_all[:train_end]
-
-    X_test = X_all[train_end:]
-    y_test = y_all[train_end:]
-
-    # =====================================================
-    # RESHAPE
-    # =====================================================
-    X_train = X_train.reshape(
-        (
-            X_train.shape[0],
-            X_train.shape[1],
-            1
-        )
-    )
-
-    X_test = X_test.reshape(
-        (
-            X_test.shape[0],
-            X_test.shape[1],
-            1
-        )
-    )
-
-    # =====================================================
-    # VALIDATION SPLIT
-    # =====================================================
-    val_size = 0.2
-
-    n_train_samples = X_train.shape[0]
-
-    n_train_val = int(
-        n_train_samples * (1 - val_size)
-    )
-
-    X_tr = X_train[:n_train_val]
-    y_tr = y_train[:n_train_val]
-
-    X_val = X_train[n_train_val:]
-    y_val = y_train[n_train_val:]
-
-    # =====================================================
     # ACF PACF
     # =====================================================
     st.subheader("📊 ACF & PACF")
@@ -383,20 +267,141 @@ if uploaded_file is not None:
     # =====================================================
     # RUN MODEL
     # =====================================================
-    if st.session_state.running:
+    if run_model:
 
+        # =================================================
+        # RESET SEED
+        # =================================================
         random.seed(SEED)
         np.random.seed(SEED)
         tf.random.set_seed(SEED)
+        tf.keras.utils.set_random_seed(SEED)
+
+        clear_session()
+        gc.collect()
+
+        # =================================================
+        # TRAIN TEST SPLIT
+        # =================================================
+        values = df[["Terakhir"]].values
+
+        n = len(values)
+
+        n_train = int(n * 0.8)
+
+        train_data = values[:n_train]
+
+        test_data = values[n_train:]
+
+        # =================================================
+        # SCALER FIT HANYA TRAIN
+        # =================================================
+        scaler = MinMaxScaler()
+
+        scaler.fit(train_data)
+
+        train_scaled = scaler.transform(
+            train_data
+        )
+
+        test_scaled = scaler.transform(
+            test_data
+        )
+
+        # =================================================
+        # GABUNG KEMBALI
+        # =================================================
+        scaled_all = np.concatenate([
+            train_scaled,
+            test_scaled
+        ])
+
+        # =================================================
+        # WINDOWING
+        # =================================================
+        def make_sequences(data, window):
+
+            X = []
+            y = []
+
+            for i in range(window, len(data)):
+
+                X.append(
+                    data[i-window:i]
+                )
+
+                y.append(
+                    data[i]
+                )
+
+            return np.array(X), np.array(y)
+
+        X_all, y_all = make_sequences(
+            scaled_all,
+            timestep
+        )
+
+        # =================================================
+        # SPLIT WINDOW
+        # =================================================
+        train_end = n_train - timestep
+
+        X_train = X_all[:train_end]
+        y_train = y_all[:train_end]
+
+        X_test = X_all[train_end:]
+        y_test = y_all[train_end:]
+
+        # =================================================
+        # RESHAPE
+        # =================================================
+        X_train = X_train.reshape(
+            (
+                X_train.shape[0],
+                X_train.shape[1],
+                1
+            )
+        )
+
+        X_test = X_test.reshape(
+            (
+                X_test.shape[0],
+                X_test.shape[1],
+                1
+            )
+        )
+
+        # =================================================
+        # VALIDATION SPLIT
+        # =================================================
+        val_size = 0.2
+
+        n_train_samples = X_train.shape[0]
+
+        n_train_val = int(
+            n_train_samples * (1 - val_size)
+        )
+
+        X_tr = X_train[:n_train_val]
+        y_tr = y_train[:n_train_val]
+
+        X_val = X_train[n_train_val:]
+        y_val = y_train[n_train_val:]
 
         # =================================================
         # OBJECTIVE FUNCTION
         # =================================================
-        def objective_function(particles_array):
+        def objective_function(
+            particles_array
+        ):
 
-            n_particles = particles_array.shape[0]
+            n_particles = (
+                particles_array.shape[0]
+            )
 
-            losses = np.zeros(n_particles)
+            losses = np.zeros(
+                n_particles
+            )
 
             for i, particle in enumerate(
                 particles_array
@@ -405,7 +410,9 @@ if uploaded_file is not None:
                 try:
 
                     units = int(
-                        np.round(particle[0])
+                        np.round(
+                            particle[0]
+                        )
                     )
 
                     lr = float(
@@ -413,20 +420,20 @@ if uploaded_file is not None:
                     )
 
                     batch = int(
-                        np.round(particle[2])
+                        np.round(
+                            particle[2]
+                        )
                     )
 
                     dropout = float(
                         particle[3]
                     )
 
-                    units = max(1, units)
-
-                    batch = max(1, batch)
-
                     clear_session()
 
-                    tf.random.set_seed(SEED)
+                    tf.random.set_seed(
+                        SEED
+                    )
 
                     model = Sequential([
 
@@ -440,9 +447,11 @@ if uploaded_file is not None:
                         GRU(
                             units=units,
                             activation="tanh",
+
                             kernel_initializer=tf.keras.initializers.GlorotUniform(
                                 seed=SEED
                             ),
+
                             recurrent_initializer=tf.keras.initializers.Orthogonal(
                                 seed=SEED
                             )
@@ -455,9 +464,11 @@ if uploaded_file is not None:
                     ])
 
                     model.compile(
+
                         optimizer=Adam(
                             learning_rate=lr
                         ),
+
                         loss="mse"
                     )
 
@@ -486,7 +497,7 @@ if uploaded_file is not None:
                         ][-1]
                     )
 
-                except:
+                except Exception:
 
                     losses[i] = 1e12
 
@@ -540,9 +551,13 @@ if uploaded_file is not None:
         )
 
         best_cost, best_pos = (
+
             optimizer.optimize(
+
                 objective_function,
+
                 iters=iterasi,
+
                 verbose=False
             )
         )
@@ -768,11 +783,6 @@ if uploaded_file is not None:
 
         st.pyplot(fig_pred)
 
-        # =================================================
-        # FINISH
-        # =================================================
         st.success(
             "✅ Proses selesai!"
         )
-
-        st.session_state.running = False
