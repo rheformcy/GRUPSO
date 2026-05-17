@@ -36,88 +36,100 @@ st.set_page_config(
 
 st.title("📈 Prediksi Harga Emas Menggunakan GRU-PSO")
 
+if "running" not in st.session_state:
+    st.session_state.running = False
+if submit_button:
+    st.session_state.running = True
+if st.session_state.running:
+
 # =========================================================
 # SIDEBAR
 # =========================================================
-st.sidebar.header("⚙️ Pengaturan Model")
+with st.sidebar.form("form_pso"):
 
-# -----------------------------
-# Hyperparameter PSO
-# -----------------------------
-particles = st.sidebar.number_input(
-    "Jumlah Partikel",
-    min_value=5,
-    max_value=100,
-    value=40
-)
+    st.header("⚙️ Pengaturan Model")
 
-iterasi = st.sidebar.number_input(
-    "Jumlah Iterasi PSO",
-    min_value=1,
-    max_value=100,
-    value=1
-)
+    # -----------------------------
+    # Hyperparameter PSO
+    # -----------------------------
+    particles = st.number_input(
+        "Jumlah Partikel",
+        min_value=5,
+        max_value=100,
+        value=40
+    )
 
-epochs_pso = st.sidebar.number_input(
-    "Epoch PSO",
-    min_value=1,
-    max_value=100,
-    value=10
-)
+    iterasi = st.number_input(
+        "Jumlah Iterasi PSO",
+        min_value=1,
+        max_value=100,
+        value=5
+    )
 
-epochs_final = st.sidebar.number_input(
-    "Epoch Final Model",
-    min_value=1,
-    max_value=500,
-    value=50
-)
+    epochs_pso = st.number_input(
+        "Epoch PSO",
+        min_value=1,
+        max_value=100,
+        value=10
+    )
 
-# -----------------------------
-# Bound Hyperparameter
-# -----------------------------
-st.sidebar.subheader("Bound Hyperparameter")
+    epochs_final = st.number_input(
+        "Epoch Final Model",
+        min_value=1,
+        max_value=500,
+        value=50
+    )
 
-units_min = st.sidebar.number_input(
-    "Units Min",
-    value=16
-)
+    # -----------------------------
+    # Bound Hyperparameter
+    # -----------------------------
+    st.subheader("Bound Hyperparameter")
 
-units_max = st.sidebar.number_input(
-    "Units Max",
-    value=128
-)
+    units_min = st.number_input(
+        "Units Min",
+        value=16
+    )
 
-lr_min = st.sidebar.number_input(
-    "Learning Rate Min",
-    value=0.0001,
-    format="%.4f"
-)
+    units_max = st.number_input(
+        "Units Max",
+        value=128
+    )
 
-lr_max = st.sidebar.number_input(
-    "Learning Rate Max",
-    value=0.01,
-    format="%.4f"
-)
+    lr_min = st.number_input(
+        "Learning Rate Min",
+        value=0.0001,
+        format="%.4f"
+    )
 
-batch_min = st.sidebar.number_input(
-    "Batch Size Min",
-    value=16
-)
+    lr_max = st.number_input(
+        "Learning Rate Max",
+        value=0.01,
+        format="%.4f"
+    )
 
-batch_max = st.sidebar.number_input(
-    "Batch Size Max",
-    value=128
-)
+    batch_min = st.number_input(
+        "Batch Size Min",
+        value=16
+    )
 
-dropout_min = st.sidebar.number_input(
-    "Dropout Min",
-    value=0.1
-)
+    batch_max = st.number_input(
+        "Batch Size Max",
+        value=128
+    )
 
-dropout_max = st.sidebar.number_input(
-    "Dropout Max",
-    value=0.5
-)
+    dropout_min = st.number_input(
+        "Dropout Min",
+        value=0.1
+    )
+
+    dropout_max = st.number_input(
+        "Dropout Max",
+        value=0.5
+    )
+
+    submit_button = st.form_submit_button(
+        "🚀 Jalankan GRU-PSO"
+    )
 
 # =========================================================
 # UPLOAD FILE
@@ -286,7 +298,7 @@ if uploaded_file is not None:
     # =====================================================
     # BUTTON RUN MODEL
     # =====================================================
-    if st.button("🚀 Jalankan GRU-PSO"):
+    if submit_button:
 
         # =================================================
         # SET SEED
