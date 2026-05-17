@@ -1,28 +1,14 @@
+# =========================================================
+# IMPORT LIBRARY
+# =========================================================
 import os
-
-os.environ['PYTHONHASHSEED'] = '49'
-os.environ['TF_DETERMINISTIC_OPS'] = '1'
-
-import tensorflow as tf
-import keras
-
-tf.keras.utils.set_random_seed(49)
-keras.utils.set_random_seed(49)
-
-tf.config.experimental.enable_op_determinism()
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import random
 import gc
-import keras
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import GRU, Dense, Dropout, Input
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.backend import clear_session
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import streamlit as st
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import (
@@ -31,252 +17,287 @@ from sklearn.metrics import (
     mean_absolute_percentage_error
 )
 
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import GRU, Dense, Dropout, Input
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.backend import clear_session
 
 from pyswarms.single.global_best import GlobalBestPSO
 
 # =========================================================
-# PAGE CONFIG
+# DETERMINISM & REPRODUCIBILITY
+# =========================================================
+os.environ["PYTHONHASHSEED"] = "49"
+os.environ["TF_DETERMINISTIC_OPS"] = "1"
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
+
+SEED = 49
+
+random.seed(SEED)
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+tf.keras.utils.set_random_seed(SEED)
+
+# =========================================================
+# STREAMLIT CONFIG
 # =========================================================
 st.set_page_config(
     page_title="GRU-PSO Forecasting",
     layout="wide"
 )
 
-st.title("📈 Prediksi Harga Emas Menggunakan GRU-PSO")
+st.title("📈 Forecasting Harga Emas Menggunakan GRU-PSO")
+
+st.markdown("""
+Optimasi hyperparameter menggunakan 
+**Particle Swarm Optimization (PSO)** 
+pada model **GRU**.
+""")
 
 # =========================================================
-# SESSION STATE
+# SIDEBAR
 # =========================================================
-if "running" not in st.session_state:
-    st.session_state.running = False
+st.sidebar.header("📂 Upload Dataset")
 
-# =========================================================
-# SIDEBAR FORM
-# =========================================================
-with st.sidebar.form("form_pso"):
+uploaded_file = st.sidebar.file_uploader(
+    "Upload File Excel",
+    type=["xlsx", "xls"]
+)
 
-    st.header("⚙️ Pengaturan Model")
+st.sidebar.divider()
 
-    # =====================================================
-    # PSO PARAMETER
-    # =====================================================
-    particles = st.number_input(
-        "Jumlah Partikel",
-        min_value=5,
-        max_value=100,
-        value=40
-    )
+st.sidebar.header("⚙️ Parameter")
 
-    iterasi = st.number_input(
-        "Jumlah Iterasi PSO",
-        min_value=1,
-        max_value=100,
-        value=5
-    )
+timestep = st.sidebar.number_input(
+    "Timestep",
+    min_value=1,
+    max_value=30,
+    value=5
+)
 
-    epochs_pso = st.number_input(
-        "Epoch PSO",
-        min_value=1,
-        max_value=100,
-        value=10
-    )
+particles = st.sidebar.number_input(
+    "Jumlah Partikel",
+    min_value=10,
+    value=30
+)
 
-    epochs_final = st.number_input(
-        "Epoch Final Model",
-        min_value=1,
-        max_value=500,
-        value=100
-    )
+iterasi = st.sidebar.number_input(
+    "Jumlah Iterasi",
+    min_value=1,
+    value=10
+)
 
-    # =====================================================
-    # BOUND HYPERPARAMETER
-    # =====================================================
-    st.subheader("Bound Hyperparameter")
+epochs_pso = st.sidebar.number_input(
+    "Epoch PSO",
+    min_value=5,
+    value=10
+)
 
-    units_min = st.number_input(
-        "Units Min",
-        value=16
-    )
+epochs_final = st.sidebar.number_input(
+    "Epoch Final",
+    min_value=20,
+    value=100
+)
 
-    units_max = st.number_input(
-        "Units Max",
-        value=128
-    )
+st.sidebar.divider()
 
-    lr_min = st.number_input(
-        "Learning Rate Min",
-        value=0.0001,
-        format="%.4f"
-    )
+st.sidebar.header("🎛️ Range Hyperparameter")
 
-    lr_max = st.number_input(
-        "Learning Rate Max",
-        value=0.01,
-        format="%.4f"
-    )
+units_min, units_max = st.sidebar.slider(
+    "Units",
+    16,
+    256,
+    (32, 128)
+)
 
-    batch_min = st.number_input(
-        "Batch Size Min",
-        value=16
-    )
+lr_min = st.sidebar.number_input(
+    "Learning Rate Min",
+    0.0001,
+    0.01,
+    0.0005,
+    format="%.5f"
+)
 
-    batch_max = st.number_input(
-        "Batch Size Max",
-        value=128
-    )
+lr_max = st.sidebar.number_input(
+    "Learning Rate Max",
+    0.0001,
+    0.05,
+    0.005,
+    format="%.5f"
+)
 
-    dropout_min = st.number_input(
-        "Dropout Min",
-        value=0.1
-    )
+batch_min, batch_max = st.sidebar.slider(
+    "Batch Size",
+    8,
+    128,
+    (16, 64)
+)
 
-    dropout_max = st.number_input(
-        "Dropout Max",
-        value=0.5
-    )
+dropout_min, dropout_max = st.sidebar.slider(
+    "Dropout",
+    0.0,
+    0.7,
+    (0.1, 0.5),
+    0.05
+)
 
-    # =====================================================
-    # SUBMIT BUTTON
-    # =====================================================
-    submit_button = st.form_submit_button(
-        "🚀 Jalankan GRU-PSO"
-    )
-
-# =========================================================
-# START PROCESS
-# =========================================================
-if submit_button:
-    st.session_state.running = True
-
-# =========================================================
-# FILE UPLOADER
-# =========================================================
-uploaded_file = st.file_uploader(
-    "📂 Upload Dataset Excel",
-    type=["xlsx"]
+start_button = st.sidebar.button(
+    "🚀 Mulai Optimasi",
+    use_container_width=True,
+    type="primary"
 )
 
 # =========================================================
-# MAIN PROCESS
+# MAIN
 # =========================================================
-if uploaded_file is not None:
+if uploaded_file is None:
+
+    st.info("📂 Silakan upload dataset terlebih dahulu.")
+    st.stop()
+
+# =========================================================
+# READ DATA
+# =========================================================
+df = pd.read_excel(uploaded_file)
+
+df.columns = df.columns.str.strip()
+
+df = df.replace(
+    r'^\s*$',
+    pd.NA,
+    regex=True
+)
+
+df.replace(
+    ["-", "?", "null", "NULL"],
+    pd.NA,
+    inplace=True
+)
+
+df["Terakhir"] = pd.to_numeric(
+    df["Terakhir"],
+    errors="coerce"
+)
+
+df = df.dropna().reset_index(drop=True)
+
+# =========================================================
+# DATASET
+# =========================================================
+st.subheader("📋 Dataset")
+
+st.dataframe(df.head())
+
+# =========================================================
+# VISUALISASI
+# =========================================================
+st.subheader("📈 Visualisasi Harga Emas")
+
+fig_data, ax_data = plt.subplots(
+    figsize=(12, 5)
+)
+
+ax_data.plot(df["Terakhir"])
+
+ax_data.set_title("Harga Emas")
+
+ax_data.grid(True)
+
+st.pyplot(fig_data)
+
+# =========================================================
+# START
+# =========================================================
+if start_button:
 
     # =====================================================
-    # READ DATA
+    # RESET SEED
     # =====================================================
-    df = pd.read_excel(uploaded_file)
+    random.seed(SEED)
+    np.random.seed(SEED)
+    tf.random.set_seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
 
-    df.columns = df.columns.str.strip()
-
-    df = df.replace(
-        r'^\s*$',
-        pd.NA,
-        regex=True
-    )
-
-    df.replace(
-        ["-", "?", "null", "NULL"],
-        pd.NA,
-        inplace=True
-    )
-
-    df["Terakhir"] = pd.to_numeric(
-        df["Terakhir"],
-        errors="coerce"
-    )
-
-    df = df.dropna().reset_index(drop=True)
+    clear_session()
+    gc.collect()
 
     # =====================================================
-    # DATASET
+    # PREPROCESSING
     # =====================================================
-    st.subheader("📋 Dataset")
-
-    st.dataframe(df.head())
-
-    # =====================================================
-    # VISUALISASI DATA
-    # =====================================================
-    st.subheader("📈 Visualisasi Harga Emas")
-
-    fig_data, ax_data = plt.subplots(
-        figsize=(12, 5)
-    )
-
-    ax_data.plot(df["Terakhir"])
-
-    ax_data.set_title("Harga Emas")
-
-    st.pyplot(fig_data)
-
-    # =====================================================
-    # SCALING
-    # =====================================================
-    feature_cols = ["Terakhir"]
-    target_col = "Terakhir"
-
-    data_features = df[feature_cols].values
-    data_target = df[[target_col]].values
+    st.subheader("🔄 Preprocessing...")
 
     values = df[["Terakhir"]].values
 
-    n = len(values)
+    # =====================================================
+    # SPLIT TRAIN TEST DULU
+    # =====================================================
+    train_size = int(len(values) * 0.8)
 
-    n_train = int(n * 0.8)
+    train_data = values[:train_size]
+    test_data = values[train_size:]
 
-    scaler_X = MinMaxScaler().fit(
-        data_features[:n_train]
+    # =====================================================
+    # SCALING
+    # FIT HANYA TRAIN
+    # =====================================================
+    scaler = MinMaxScaler()
+
+    scaler.fit(train_data)
+
+    train_scaled = scaler.transform(train_data)
+    test_scaled = scaler.transform(test_data)
+
+    # =====================================================
+    # GABUNGKAN LAGI
+    # =====================================================
+    data_scaled = np.concatenate(
+        [train_scaled, test_scaled],
+        axis=0
     )
-
-    scaler_y = MinMaxScaler().fit(
-        data_target[:n_train]
-    )
-
-    Xs = scaler_X.transform(data_features)
-
-    ys = scaler_y.transform(data_target)
 
     # =====================================================
     # WINDOWING
     # =====================================================
-    window = 1
+    def create_sequences(data, time_step):
 
-    def make_sequences(
-        X_scaled,
-        y_scaled,
-        window
-    ):
+        X = []
+        y = []
 
-        X_seq = []
-        y_seq = []
+        for i in range(time_step, len(data)):
 
-        for i in range(window, len(X_scaled)):
-
-            X_seq.append(
-                X_scaled[i-window:i]
+            X.append(
+                data[i-time_step:i]
             )
 
-            y_seq.append(
-                y_scaled[i]
+            y.append(
+                data[i]
             )
 
-        return np.array(X_seq), np.array(y_seq)
+        return np.array(X), np.array(y)
 
-    X_seq_all, y_seq_all = make_sequences(
-        Xs,
-        ys,
-        window
+    X_seq, y_seq = create_sequences(
+        data_scaled,
+        timestep
     )
 
-    dtrain_end = n_train - window
+    # =====================================================
+    # SPLIT SEQUENCE
+    # =====================================================
+    train_seq_size = train_size - timestep
 
-    X_train = X_seq_all[:dtrain_end]
-    y_train = y_seq_all[:dtrain_end]
+    X_train = X_seq[:train_seq_size]
+    y_train = y_seq[:train_seq_size]
 
-    X_test = X_seq_all[dtrain_end:]
-    y_test = y_seq_all[dtrain_end:]
+    X_test = X_seq[train_seq_size:]
+    y_test = y_seq[train_seq_size:]
 
+    # =====================================================
+    # RESHAPE
+    # =====================================================
     X_train = X_train.reshape(
         (
             X_train.shape[0],
@@ -294,584 +315,330 @@ if uploaded_file is not None:
     )
 
     # =====================================================
-    # ACF PACF
+    # TRAIN VALIDATION SPLIT
     # =====================================================
-    st.subheader("📊 ACF & PACF")
+    val_split = int(len(X_train) * 0.8)
 
-    col1, col2 = st.columns(2)
+    X_tr = X_train[:val_split]
+    X_val = X_train[val_split:]
 
-    with col1:
+    y_tr = y_train[:val_split]
+    y_val = y_train[val_split:]
 
-        fig_acf, ax_acf = plt.subplots(
-            figsize=(6, 4)
-        )
-
-        plot_acf(
-            df["Terakhir"],
-            lags=30,
-            ax=ax_acf
-        )
-
-        st.pyplot(fig_acf)
-
-    with col2:
-
-        fig_pacf, ax_pacf = plt.subplots(
-            figsize=(6, 4)
-        )
-
-        plot_pacf(
-            df["Terakhir"],
-            lags=30,
-            method='ywm',
-            ax=ax_pacf
-        )
-
-        st.pyplot(fig_pacf)
+    st.success("✅ Preprocessing selesai")
 
     # =====================================================
-    # RUN MODEL
+    # OBJECTIVE FUNCTION
     # =====================================================
-    if st.session_state.running:
+    def objective_function(particles_array):
 
-        # =================================================
-        # SET SEED
-        # =================================================
-        SEED = 49
-        
-        random.seed(SEED)
-        np.random.seed(SEED)
-        tf.random.set_seed(SEED)
-        tf.keras.utils.set_random_seed(49)
+        n_particles = particles_array.shape[0]
 
-        # =================================================
-        # VALIDATION SPLIT
-        # =================================================
-        val_size = 0.2
+        losses = np.zeros(n_particles)
 
-        n_train_samples = X_train.shape[0]
+        for i, particle in enumerate(particles_array):
 
-        n_train_val = int(
-            n_train_samples * (1 - val_size)
-        )
+            try:
 
-        X_tr = X_train[:n_train_val]
-        y_tr = y_train[:n_train_val]
-
-        X_val = X_train[n_train_val:]
-        y_val = y_train[n_train_val:]
-
-        # =================================================
-        # OBJECTIVE FUNCTION
-        # =================================================
-        def objective_function(particles):
-
-            n_particles = particles.shape[0]
-
-            losses = np.zeros(n_particles)
-
-            for i, particle in enumerate(particles):
-
-                units = int(
-                    np.round(particle[0])
-                )
-
+                units = int(round(particle[0]))
                 lr = float(particle[1])
-
-                batch = int(
-                    np.round(particle[2])
-                )
-
+                batch = int(round(particle[2]))
                 dropout = float(particle[3])
 
-                try:
+                units = max(16, units)
+                batch = max(8, batch)
 
-                    tf.random.set_seed(SEED)
+                clear_session()
 
-                    clear_session()
+                tf.random.set_seed(SEED)
 
-                    model = Sequential([
+                model = Sequential([
 
-                        Input(
-                            shape=(
-                                X_tr.shape[1],
-                                X_tr.shape[2]
-                            )
-                        ),
+                    Input(
+                        shape=(X_tr.shape[1], 1)
+                    ),
 
-                        GRU(
-                            units=units,
-                            activation='tanh'
-                        ),
+                    GRU(
+                        units=units,
+                        activation='tanh',
+                        kernel_initializer=tf.keras.initializers.GlorotUniform(seed=SEED),
+                        recurrent_initializer=tf.keras.initializers.Orthogonal(seed=SEED)
+                    ),
 
-                        Dropout(dropout),
+                    Dropout(dropout),
 
-                        Dense(1)
+                    Dense(1)
 
-                    ])
+                ])
 
-                    model.compile(
-                        optimizer=Adam(
-                            learning_rate=lr
-                        ),
-                        loss='mse'
-                    )
+                model.compile(
+                    optimizer=Adam(
+                        learning_rate=lr
+                    ),
+                    loss='mse'
+                )
 
-                    model.fit(
-                        X_tr,
-                        y_tr,
-                        epochs=epochs_pso,
-                        batch_size=batch,
-                        verbose=0,
-                        shuffle=False
-                    )
+                history = model.fit(
 
-                    y_val_pred = model.predict(
-                        X_val,
-                        verbose=0
-                    )
+                    X_tr,
+                    y_tr,
 
-                    y_val_pred_inv = (
-                        scaler_y.inverse_transform(
-                            y_val_pred
-                        ).flatten()
-                    )
+                    validation_data=(X_val, y_val),
 
-                    y_val_true_inv = (
-                        scaler_y.inverse_transform(
-                            y_val.reshape(-1, 1)
-                        ).flatten()
-                    )
+                    epochs=epochs_pso,
 
-                    losses[i] = mean_squared_error(
-                        y_val_true_inv,
-                        y_val_pred_inv
-                    )
+                    batch_size=batch,
 
-                except Exception as e:
+                    verbose=0,
 
-                    st.write(
-                        f"Error particle {i}: {e}"
-                    )
+                    shuffle=False
+                )
 
-                    losses[i] = 1e12
+                losses[i] = history.history['val_loss'][-1]
 
                 clear_session()
 
                 gc.collect()
 
-            return losses
-
-        # =================================================
-        # PSO CONFIG
-        # =================================================
-        bounds = (
-            [
-                units_min,
-                lr_min,
-                batch_min,
-                dropout_min
-            ],
-            [
-                units_max,
-                lr_max,
-                batch_max,
-                dropout_max
-            ]
-        )
-
-        options = {
-            'c1': 2.0,
-            'c2': 2.0,
-            'w': 0.7
-        }
-
-        st.write("🚀 Menjalankan PSO...")
-
-        progress_bar = st.progress(0)
-
-        # =================================================
-        # INIT PSO
-        # =================================================
-        optimizer = GlobalBestPSO(
-            n_particles=particles,
-            dimensions=4,
-            options=options,
-            bounds=bounds
-        )
-
-        n_particles, dims = (
-            optimizer.swarm.position.shape
-        )
-
-        optimizer.swarm.pbest_pos = (
-            optimizer.swarm.position.copy()
-        )
-
-        optimizer.swarm.pbest_cost = np.full(
-            n_particles,
-            np.inf
-        )
-
-        history_gbest_cost = []
-        history_gbest_pos = []
-
-        # =================================================
-        # LOOP PSO MANUAL
-        # =================================================
-        for it in range(iterasi):
-
-            costs = objective_function(
-                optimizer.swarm.position
-            )
-
-            # =============================================
-            # UPDATE PBEST
-            # =============================================
-            mask = (
-                costs <
-                optimizer.swarm.pbest_cost
-            )
-
-            optimizer.swarm.pbest_cost[mask] = (
-                costs[mask]
-            )
-
-            optimizer.swarm.pbest_pos[mask] = (
-                optimizer.swarm.position[mask].copy()
-            )
-
-            # =============================================
-            # UPDATE GBEST
-            # =============================================
-            best_idx = np.argmin(
-                optimizer.swarm.pbest_cost
-            )
-
-            optimizer.swarm.best_cost = (
-                optimizer.swarm.pbest_cost[best_idx]
-            )
-
-            optimizer.swarm.best_pos = (
-                optimizer.swarm.pbest_pos[best_idx].copy()
-            )
-
-            # =============================================
-            # SAVE HISTORY
-            # =============================================
-            history_gbest_cost.append(
-                float(
-                    optimizer.swarm.best_cost
-                )
-            )
+            except:
+
+                losses[i] = 1e12
 
-            history_gbest_pos.append(
-                optimizer.swarm.best_pos.copy()
-            )
+        return losses
 
-            # =============================================
-            # UPDATE VELOCITY
-            # =============================================
-            r1 = np.random.rand(
-                *optimizer.swarm.position.shape
-            )
+    # =====================================================
+    # PSO
+    # =====================================================
+    st.write("🚀 Menjalankan Particle Swarm Optimization...")
 
-            r2 = np.random.rand(
-                *optimizer.swarm.position.shape
-            )
+    progress_bar = st.progress(0)
 
-            optimizer.swarm.velocity = (
+    bounds = (
+        [
+            units_min,
+            lr_min,
+            batch_min,
+            dropout_min
+        ],
+        [
+            units_max,
+            lr_max,
+            batch_max,
+            dropout_max
+        ]
+    )
 
-                options['w']
-                * optimizer.swarm.velocity
+    options = {
+        'c1': 2.0,
+        'c2': 2.0,
+        'w': 0.7
+    }
+
+    optimizer = GlobalBestPSO(
+        n_particles=particles,
+        dimensions=4,
+        options=options,
+        bounds=bounds
+    )
+
+    best_cost, best_pos = optimizer.optimize(
+        objective_function,
+        iters=iterasi,
+        verbose=True
+    )
+
+    progress_bar.progress(50)
+
+    # =====================================================
+    # BEST PARAMETER
+    # =====================================================
+    best_units = int(round(best_pos[0]))
+    best_lr = float(best_pos[1])
+    best_batch = int(round(best_pos[2]))
+    best_dropout = float(best_pos[3])
+
+    # =====================================================
+    # FINAL MODEL
+    # =====================================================
+    st.write("🤖 Training Final Model...")
+
+    clear_session()
+
+    tf.random.set_seed(SEED)
+
+    model_final = Sequential([
+
+        Input(
+            shape=(X_train.shape[1], 1)
+        ),
+
+        GRU(
+            units=best_units,
+            activation='tanh',
+            kernel_initializer=tf.keras.initializers.GlorotUniform(seed=SEED),
+            recurrent_initializer=tf.keras.initializers.Orthogonal(seed=SEED)
+        ),
+
+        Dropout(best_dropout),
+
+        Dense(1)
+
+    ])
+
+    model_final.compile(
+        optimizer=Adam(
+            learning_rate=best_lr
+        ),
+        loss='mse'
+    )
+
+    history = model_final.fit(
+
+        X_train,
+        y_train,
+
+        validation_split=0.2,
+
+        epochs=epochs_final,
+
+        batch_size=best_batch,
 
-                + options['c1']
-                * r1
-                * (
-                    optimizer.swarm.pbest_pos
-                    - optimizer.swarm.position
-                )
+        shuffle=False,
 
-                + options['c2']
-                * r2
-                * (
-                    optimizer.swarm.best_pos
-                    - optimizer.swarm.position
-                )
-            )
+        verbose=1
+    )
 
-            # =============================================
-            # UPDATE POSITION
-            # =============================================
-            optimizer.swarm.position += (
-                optimizer.swarm.velocity
-            )
+    progress_bar.progress(100)
 
-            lb = np.array(bounds[0])
+    # =====================================================
+    # PREDICTION
+    # =====================================================
+    y_pred_scaled = model_final.predict(
+        X_test,
+        verbose=0
+    )
 
-            ub = np.array(bounds[1])
+    y_pred = scaler.inverse_transform(
+        y_pred_scaled
+    ).flatten()
 
-            optimizer.swarm.position = np.clip(
-                optimizer.swarm.position,
-                lb,
-                ub
-            )
+    y_actual = scaler.inverse_transform(
+        y_test.reshape(-1, 1)
+    ).flatten()
 
-            progress = int(
-                ((it + 1) / iterasi) * 100
-            )
-
-            progress_bar.progress(progress)
-
-            st.write(
-                f"""
-                Iterasi {it+1}
-
-                Best Loss:
-                {optimizer.swarm.best_cost:.6f}
-                """
-            )
-
-        # =================================================
-        # BEST PARAMETER
-        # =================================================
-        best_pos = history_gbest_pos[-1]
-
-        best_cost = history_gbest_cost[-1]
-
-        best_units = int(
-            np.round(best_pos[0])
-        )
-
-        best_lr = float(best_pos[1])
-
-        best_batch = int(
-            np.round(best_pos[2])
-        )
-
-        best_dropout = float(best_pos[3])
-
-        # =================================================
-        # BEST HYPERPARAMETER
-        # =================================================
-        st.subheader("🏆 Best Hyperparameter")
-
-        st.dataframe(pd.DataFrame({
-
-            "Units": [best_units],
-
-            "Learning Rate": [best_lr],
-
-            "Batch Size": [best_batch],
-
-            "Dropout": [best_dropout],
-
-            "Best MSE": [best_cost]
-
-        }))
-
-        # =================================================
-        # GRAFIK KONVERGENSI
-        # =================================================
-        st.subheader("📉 Grafik Konvergensi PSO")
-
-        fig_conv, ax_conv = plt.subplots(
-            figsize=(8, 5)
-        )
-
-        ax_conv.plot(
-            range(
-                1,
-                len(history_gbest_cost)+1
-            ),
-            history_gbest_cost,
-            marker='o'
-        )
-
-        ax_conv.set_xlabel("Iterasi")
-
-        ax_conv.set_ylabel(
-            "Global Best Loss"
-        )
-
-        ax_conv.set_title(
-            "Konvergensi PSO"
-        )
-
-        ax_conv.grid(True)
-
-        st.pyplot(fig_conv)
-
-        # =================================================
-        # FINAL MODEL
-        # =================================================
-        st.write("🤖 Training Final Model...")
-
-        clear_session()
-
-        tf.random.set_seed(SEED)
-
-        model_final = Sequential([
-
-            Input(
-                shape=(
-                    X_train.shape[1],
-                    X_train.shape[2]
-                )
-            ),
-
-            GRU(
-                units=best_units,
-                activation='tanh'
-            ),
-
-            Dropout(best_dropout),
-
-            Dense(1)
-
-        ])
-
-        model_final.compile(
-
-            optimizer=Adam(
-                learning_rate=best_lr
-            ),
-
-            loss='mse'
-        )
-
-        history = model_final.fit(
-        
-            X_tr,
-            y_tr,
-        
-            validation_data=(X_val, y_val),
-        
-            epochs=epochs_final,
-        
-            batch_size=best_batch,
-        
-            verbose=1,
-        
-            shuffle=False
-        )
-
-        # =================================================
-        # PREDICTION
-        # =================================================
-        y_pred_scaled = model_final.predict(
-            X_test,
-            verbose=0
-        )
-
-        y_pred = scaler_y.inverse_transform(
-            y_pred_scaled
-        ).flatten()
-
-        y_actual = scaler_y.inverse_transform(
-            y_test.reshape(-1, 1)
-        ).flatten()
-
-        # =================================================
-        # EVALUATION
-        # =================================================
-        rmse = np.sqrt(
-            mean_squared_error(
-                y_actual,
-                y_pred
-            )
-        )
-
-        mae = mean_absolute_error(
+    # =====================================================
+    # EVALUATION
+    # =====================================================
+    rmse = np.sqrt(
+        mean_squared_error(
             y_actual,
             y_pred
         )
+    )
 
-        mape = (
-            mean_absolute_percentage_error(
-                y_actual,
-                y_pred
-            ) * 100
-        )
+    mae = mean_absolute_error(
+        y_actual,
+        y_pred
+    )
 
-        # =================================================
-        # METRICS
-        # =================================================
-        st.subheader("📊 Evaluasi Model")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric(
-            "RMSE",
-            f"{rmse:,.2f}"
-        )
-
-        col2.metric(
-            "MAE",
-            f"{mae:,.2f}"
-        )
-
-        col3.metric(
-            "MAPE",
-            f"{mape:.4f}%"
-        )
-
-        # =================================================
-        # LOSS PLOT
-        # =================================================
-        st.subheader(
-            "📉 Training & Validation Loss"
-        )
-
-        fig_loss, ax_loss = plt.subplots(
-            figsize=(10, 5)
-        )
-
-        ax_loss.plot(
-            history.history['loss'],
-            label='Training Loss'
-        )
-
-        ax_loss.plot(
-            history.history['val_loss'],
-            label='Validation Loss'
-        )
-
-        ax_loss.legend()
-
-        ax_loss.grid(True)
-
-        st.pyplot(fig_loss)
-
-        # =================================================
-        # ACTUAL VS PREDICTION
-        # =================================================
-        st.subheader("📈 Actual vs Prediction")
-
-        fig_pred, ax_pred = plt.subplots(
-            figsize=(14, 7)
-        )
-
-        ax_pred.plot(
+    mape = (
+        mean_absolute_percentage_error(
             y_actual,
-            label='Actual',
-            linewidth=2
-        )
+            y_pred
+        ) * 100
+    )
 
-        ax_pred.plot(
-            y_pred,
-            label='Prediction',
-            linestyle='--',
-            linewidth=2
-        )
+    # =====================================================
+    # HASIL
+    # =====================================================
+    st.success("✅ Optimasi selesai!")
 
-        ax_pred.legend()
+    st.subheader("🏆 Best Hyperparameter")
 
-        ax_pred.grid(True)
+    st.dataframe(pd.DataFrame({
 
-        st.pyplot(fig_pred)
+        "Units": [best_units],
 
-        # =================================================
-        # STOP PROCESS
-        # =================================================
-        st.session_state.running = False
+        "Learning Rate": [best_lr],
+
+        "Batch Size": [best_batch],
+
+        "Dropout": [best_dropout],
+
+        "Best Loss": [best_cost]
+
+    }))
+
+    # =====================================================
+    # METRICS
+    # =====================================================
+    st.subheader("📊 Evaluasi Model")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "RMSE",
+        f"{rmse:,.2f}"
+    )
+
+    col2.metric(
+        "MAE",
+        f"{mae:,.2f}"
+    )
+
+    col3.metric(
+        "MAPE",
+        f"{mape:.4f}%"
+    )
+
+    # =====================================================
+    # LOSS PLOT
+    # =====================================================
+    st.subheader("📉 Training & Validation Loss")
+
+    fig_loss, ax_loss = plt.subplots(
+        figsize=(10, 5)
+    )
+
+    ax_loss.plot(
+        history.history['loss'],
+        label='Train Loss'
+    )
+
+    ax_loss.plot(
+        history.history['val_loss'],
+        label='Validation Loss'
+    )
+
+    ax_loss.legend()
+
+    ax_loss.grid(True)
+
+    st.pyplot(fig_loss)
+
+    # =====================================================
+    # PREDICTION PLOT
+    # =====================================================
+    st.subheader("📈 Actual vs Prediction")
+
+    fig_pred, ax_pred = plt.subplots(
+        figsize=(12, 6)
+    )
+
+    ax_pred.plot(
+        y_actual,
+        label="Actual",
+        linewidth=2
+    )
+
+    ax_pred.plot(
+        y_pred,
+        label="Prediction",
+        linewidth=2
+    )
+
+    ax_pred.legend()
+
+    ax_pred.grid(True)
+
+    st.pyplot(fig_pred)
