@@ -55,7 +55,7 @@ iterasi = st.sidebar.number_input(
     "Jumlah Iterasi PSO",
     min_value=1,
     max_value=100,
-    value=5
+    value=1
 )
 
 epochs_pso = st.sidebar.number_input(
