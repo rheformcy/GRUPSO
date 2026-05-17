@@ -3,13 +3,18 @@ import os
 os.environ['PYTHONHASHSEED'] = '49'
 os.environ['TF_DETERMINISTIC_OPS'] = '1'
 
+import tensorflow as tf
+import keras
+
 tf.keras.utils.set_random_seed(49)
+keras.utils.set_random_seed(49)
+
+tf.config.experimental.enable_op_determinism()
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import tensorflow as tf
 import random
 import gc
 import keras
