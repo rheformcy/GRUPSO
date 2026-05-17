@@ -861,4 +861,3 @@ if uploaded_file is not None:
         # STOP PROCESS
         # =================================================
         st.session_state.running = False
-```
