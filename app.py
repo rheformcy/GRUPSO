@@ -63,6 +63,8 @@ if uploaded_file is not None:
         values = _df_emas[['Terakhir']].values
         n = len(values)
         n_train = int(n * 0.8)
+        train_values = values[:n_train]
+        test_values  = values[n_train:]
 
         # Data Scaling
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
@@ -70,23 +72,35 @@ if uploaded_file is not None:
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
+        # Fungsi Windowing
+        def make_sequences(X_scaled, y_scaled, window):
+            X_seq, y_seq = [], []
+        
+            for i in range(window, len(X_scaled)):
+                X_seq.append(X_scaled[i-window:i])
+                y_seq.append(y_scaled[i])
+        
+            return np.array(X_seq), np.array(y_seq)
+    
         # Windowing Data
         window = 1
-        X_seq, y_seq = [], []
-        for i in range(window, len(Xs)):
-            X_seq.append(Xs[i-window:i])
-            y_seq.append(ys[i])
-        X_seq_all, y_seq_all = np.array(X_seq), np.array(y_seq)
+        X_seq_all, y_seq_all = make_sequences(Xs, ys, window)
         
+        # Split train-test
         dtrain_end = n_train - window
-
+        
         X_train = X_seq_all[:dtrain_end]
         y_train = y_seq_all[:dtrain_end]
+        
         X_test = X_seq_all[dtrain_end:]
         y_test = y_seq_all[dtrain_end:]
-
+        
+        # Reshape untuk input GRU
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+        
+        print(f"Shape X_train: {X_train.shape}")
+        print(f"Shape X_test: {X_test.shape}")
 
         # Split manual 80:20 untuk Train & Validation Internal PSO
         val_PSOSL = 0.2
@@ -99,65 +113,81 @@ if uploaded_file is not None:
         y_val_PSOSL = y_train[n_tr_val_PSOSL:]
 
         # Fungsi Fitness PSO
-        def obj_fn(particles):
-            n_particles = particles.shape[0]
-            costs = np.zeros(n_particles)
-            for i, p in enumerate(particles):
-                units = int(np.round(p[0]))
-                lr = float(p[1])
-                batch = int(np.round(p[2]))
-                dropout = float(p[3])
-                try:
-                    # Kunci seed di setiap iterasi partikel
-                    tf.random.set_seed(SEED)
-                    clear_session()
+        def make_pso_obj(X_tr, y_tr, X_va, y_va, scaler_y):
+            def obj_fn(particles):
+                n_particles = particles.shape[0]
+                costs = np.zeros(n_particles)
+                for i, p in enumerate(particles):
+                    units = int(np.round(p[0]))
+                    lr = float(p[1])
+                    batch = int(np.round(p[2]))
+                    dropout = float(p[3])
+                    try:
+                        tf.random.set_seed(49)
+                        clear_session()
 
-                    model = Sequential([
-                        Input(shape=(X_tr_PSOSL.shape[1], X_tr_PSOSL.shape[2])),
-                        GRU(units=units, activation='tanh'),
-                        Dropout(dropout),
-                        Dense(1)
-                    ])
-                    model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
-                    model.fit(X_tr_PSOSL, y_tr_PSOSL, epochs=10, batch_size=batch, verbose=0)
-                    
-                    yv_pred = model.predict(X_val_PSOSL, verbose=0)
-                    yv_pred_orig = scaler_y.inverse_transform(yv_pred).flatten()
-                    yv_true_orig = scaler_y.inverse_transform(y_val_PSOSL.reshape(-1, 1)).flatten()
-                    costs[i] = mean_squared_error(yv_true_orig, yv_pred_orig)
-                except Exception as e:
-                    costs[i] = 1e12
-                clear_session()
-                gc.collect()
-            return costs
+                        # Arsitektur GRU
+                        model = Sequential([
+                            Input(shape=(X_tr.shape[1], X_tr.shape[2])),
+                            GRU(units=units, activation='tanh'),
+                            Dropout(dropout),
+                            Dense(1)
+                        ])
+                        model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
+                        model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
+            
+                        yv_pred = model.predict(X_va, verbose=0)
+                        yv_pred_orig = scaler_y.inverse_transform(yv_pred).flatten()
+                        yv_true_orig = scaler_y.inverse_transform(y_va.reshape(-1, 1)).flatten()
+                        costs[i] = mean_squared_error(yv_true_orig, yv_pred_orig)
+                    except Exception as e:
+                        costs[i] = 1e12
+                    clear_session()
+                    gc.collect()
+                return costs
+            return obj_fn
+            
+            pso_obj_PSOSL = make_pso_obj(
+            X_tr_PSOSL, y_tr_PSOSL,
+            X_val_PSOSL, y_val_PSOSL,
+            scaler_y
+            )
 
         # Konfigurasi & Inisialisasi PSO
         optimizer = GlobalBestPSO(
-            n_particles=40, dimensions=4,
+            n_particles=40, dimensions=4, PSOSL_iters=1,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
-            bounds=([16, 0.0001, 16, 0.1], [128, 0.01, 128, 0.5])
+            bounds=([16, 0.0001, 16, 0.01], [128, 0.01, 128, 0.5])
         )
         
         n_particles, dims = optimizer.swarm.position.shape
         optimizer.swarm.pbest_pos_PSOSL = optimizer.swarm.position.copy()
         optimizer.swarm.pbest_cost_PSOSL = np.full(n_particles, np.inf)
         
-        history_gbest_pos_PSOSL = []
+       history_positions_PSOSL = []
+       history_velocity_PSOSL = []
+       history_costs_PSOSL = []
+       history_gbest_cost_PSOSL = []
+       history_gbest_pos_PSOSL = []
+       history_r1_PSOSL = []
+       history_r2_PSOSL = []
 
         # Loop PSO Utama
-        for it in range(5):
-            # KUNCI ANGKA ACAK SEBELUM UPDATE VELOCITY KHUSUSNYA DI STREAMLIT
-            np.random.seed(SEED + it) 
-            
-            costs_PSOSL = obj_fn(optimizer.swarm.position)
-            
+        for it in range(PSOSL_iters):
+            # Evaluasi Fungsi Fitness
+            costs_PSOSL = pso_obj_PSOSL(optimizer.swarm.position)
+            # Update pbest (Personal Best)
             mask_PSOSL = costs_PSOSL < optimizer.swarm.pbest_cost_PSOSL
             optimizer.swarm.pbest_cost_PSOSL[mask_PSOSL] = costs_PSOSL[mask_PSOSL]
             optimizer.swarm.pbest_pos_PSOSL[mask_PSOSL] = optimizer.swarm.position[mask_PSOSL].copy()
-            
+            # Update gbest (Global Best)
             best_PSOSL = np.argmin(optimizer.swarm.pbest_cost_PSOSL)
             optimizer.swarm.best_cost_PSOSL = optimizer.swarm.pbest_cost_PSOSL[best_PSOSL]
             optimizer.swarm.best_pos_PSOSL = optimizer.swarm.pbest_pos_PSOSL[best_PSOSL].copy()
+            history_positions_PSOSL.append(optimizer.swarm.position.copy())
+            history_velocity_PSOSL.append(optimizer.swarm.velocity.copy())
+            history_costs_PSOSL.append(costs_PSOSL.copy())
+            history_gbest_cost_PSOSL.append(float(optimizer.swarm.best_cost_PSOSL))
             history_gbest_pos_PSOSL.append(optimizer.swarm.best_pos_PSOSL.copy())
 
             # Update Velocity & Position manual (Disinkronkan benih acaknya)
@@ -169,14 +199,15 @@ if uploaded_file is not None:
                 + 2.0 * r2 * (optimizer.swarm.best_pos_PSOSL - optimizer.swarm.position)
             )
             optimizer.swarm.position += optimizer.swarm.velocity
-            optimizer.swarm.position = np.clip(optimizer.swarm.position, np.array([16, 0.0001, 16, 0.1]), np.array([128, 0.01, 128, 0.5]))
+            optimizer.swarm.position = np.clip(optimizer.swarm.position, np.array([16, 0.0001, 16, 0.01]), np.array([128, 0.01, 128, 0.5]))
 
         # Ambil Hyperparameter Terbaik
         best_pos_PSOSL = history_gbest_pos_PSOSL[-1]
-        best_units = int(np.round(best_pos_PSOSL[0]))
-        best_lr = float(best_pos_PSOSL[1])
-        best_batch = int(np.round(best_pos_PSOSL[2]))
-        best_dropout = float(best_pos_PSOSL[3])
+        best_cost_PSOSL = history_gbest_cost_PSOSL[-1]
+        best_units_PSOSL = int(np.round(best_pos_PSOSL[0]))
+        best_lr_PSOSL = float(best_pos_PSOSL[1])
+        best_batch_PSOSL = int(np.round(best_pos_PSOSL[2]))
+        best_dropout_PSOSL = float(best_pos_PSOSL[3])
 
         # ========================================================
         # PERUBAHAN KRUSIAL: SINKRONISASI VALIDATION SPLIT FINAL
@@ -186,31 +217,33 @@ if uploaded_file is not None:
         tf.random.set_seed(SEED)
         GRU_PSOSL = Sequential([
             Input(shape=(X_train.shape[1], X_train.shape[2])),
-            GRU(units=best_units, activation='tanh'),
-            Dropout(best_dropout),
+            GRU(units=best_units_PSOSL, activation='tanh'),
+            Dropout(best_dropout_PSOSL),
             Dense(1)
         ])
-        GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr), loss='mse')
+        GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr_PSOSL), loss='mse')
         
         # Di sini kita masukkan validation_data secara manual, bukan pakai validation_split otomatis
         history_final = GRU_PSOSL.fit(
-            X_tr_PSOSL, y_tr_PSOSL,
+            X_train, y_train,
             epochs=50,
-            batch_size=best_batch,
-            validation_data=(X_val_PSOSL, y_val_PSOSL), 
-            verbose=0
+            batch_size=best_batch_PSOSL,
+            validation_data=0.2, 
+            verbose=1
         )
 
         # Evaluasi Akhir Test
-        y_pred = GRU_PSOSL.predict(X_test, verbose=0)
-        y_pred_orig = scaler_y.inverse_transform(y_pred).flatten()
-        y_test_orig = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
+        y_pred_PSOSL = GRU_PSOSL.predict(X_test, verbose=0)
+        y_pred_orig_PSOSL = scaler_y.inverse_transform(y_pred_PSOSL).flatten()
+        y_test_orig_PSOSL = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         
-        rmse = np.sqrt(mean_squared_error(y_test_orig, y_pred_orig))
-        mae = mean_absolute_error(y_test_orig, y_pred_orig)
-        mape = mean_absolute_percentage_error(y_test_orig, y_pred_orig) * 100
-
-        return best_units, best_lr, best_batch, best_dropout, rmse, mae, mape, y_test_orig, y_pred_orig
+        rmse_PSOSL = np.sqrt(mean_squared_error(y_test_orig_PSOSL, y_pred_orig_PSOSL))
+        mae_PSOSL = mean_absolute_error(y_test_orig_PSOSL, y_pred_orig_PSOSL)
+        mape_PSOSL = mean_absolute_percentage_error(y_test_orig_PSOSL, y_pred_orig_PSOSL) * 100
+        train_loss_PSOSL = history_final.history['loss'][-1]
+        val_loss_PSOSL = history_final.history['val_loss'][-1]
+        epoch_PSOSL = len(history_final.history['loss'])
+        return best_units_PSOSL, best_lr_PSOSL, best_batch_PSOSL, best_dropout_PSOSL, rmse_PSOSL, mae_PSOSL, mape_PSOSL, y_test_orig, y_pred_orig
 
     # Tombol pemicu eksekusi
     if st.button("Mulai Optimasi & Prediksi (Proses Berat)"):
@@ -230,9 +263,9 @@ if uploaded_file is not None:
         # Tampilkan Hasil Evaluasi Metrik
         st.subheader("Hasil Evaluasi Data Testing:")
         res_df = pd.DataFrame([{
-            'RMSE (Rp)': round(rmse, 2),
-            'MAE (Rp)': round(mae, 2),
-            'MAPE (%)': round(mape, 4)
+            'RMSE (Rp)': round(rmse_PSOSL, 2),
+            'MAE (Rp)': round(mae_PSOSL, 2),
+            'MAPE (%)': round(mape_PSOSL, 4)
         }])
         st.dataframe(res_df)
 
