@@ -137,9 +137,9 @@ if uploaded_file is not None:
                         model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
             
                         yv_pred = model.predict(X_va, verbose=0)
-                        yv_pred_orig = scaler_y.inverse_transform(yv_pred).flatten()
-                        yv_true_orig = scaler_y.inverse_transform(y_va.reshape(-1, 1)).flatten()
-                        costs[i] = mean_squared_error(yv_true_orig, yv_pred_orig)
+                        yv_pred_orig_PSOSL = scaler_y.inverse_transform(yv_pred).flatten()
+                        yv_true_orig_PSOSL = scaler_y.inverse_transform(y_va.reshape(-1, 1)).flatten()
+                        costs[i] = mean_squared_error(yv_true_orig_PSOSL, yv_pred_orig_PSOSL)
                     except Exception as e:
                         costs[i] = 1e12
                     clear_session()
@@ -147,15 +147,16 @@ if uploaded_file is not None:
                 return costs
             return obj_fn
             
-            pso_obj_PSOSL = make_pso_obj(
-            X_tr_PSOSL, y_tr_PSOSL,
-            X_val_PSOSL, y_val_PSOSL,
-            scaler_y
+        pso_obj_PSOSL = make_pso_obj(
+        X_tr_PSOSL, y_tr_PSOSL,
+        X_val_PSOSL, y_val_PSOSL,
+        scaler_y
             )
 
         # Konfigurasi & Inisialisasi PSO
+        PSOSL_iters=1
         optimizer = GlobalBestPSO(
-            n_particles=40, dimensions=4, PSOSL_iters=1,
+            n_particles=40, dimensions=4,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
             bounds=([16, 0.0001, 16, 0.01], [128, 0.01, 128, 0.5])
         )
@@ -164,13 +165,13 @@ if uploaded_file is not None:
         optimizer.swarm.pbest_pos_PSOSL = optimizer.swarm.position.copy()
         optimizer.swarm.pbest_cost_PSOSL = np.full(n_particles, np.inf)
         
-       history_positions_PSOSL = []
-       history_velocity_PSOSL = []
-       history_costs_PSOSL = []
-       history_gbest_cost_PSOSL = []
-       history_gbest_pos_PSOSL = []
-       history_r1_PSOSL = []
-       history_r2_PSOSL = []
+        history_positions_PSOSL = []
+        history_velocity_PSOSL = []
+        history_costs_PSOSL = []
+        history_gbest_cost_PSOSL = []
+        history_gbest_pos_PSOSL = []
+        history_r1_PSOSL = []
+        history_r2_PSOSL = []
 
         # Loop PSO Utama
         for it in range(PSOSL_iters):
@@ -243,8 +244,17 @@ if uploaded_file is not None:
         train_loss_PSOSL = history_final.history['loss'][-1]
         val_loss_PSOSL = history_final.history['val_loss'][-1]
         epoch_PSOSL = len(history_final.history['loss'])
-        return best_units_PSOSL, best_lr_PSOSL, best_batch_PSOSL, best_dropout_PSOSL, rmse_PSOSL, mae_PSOSL, mape_PSOSL, y_test_orig, y_pred_orig
-
+        return (
+            best_units_PSOSL,
+            best_lr_PSOSL,
+            best_batch_PSOSL,
+            best_dropout_PSOSL,
+            rmse_PSOSL,
+            mae_PSOSL,
+            mape_PSOSL,
+            y_test_orig_PSOSL,
+            y_pred_orig_PSOSL
+        )
     # Tombol pemicu eksekusi
     if st.button("Mulai Optimasi & Prediksi (Proses Berat)"):
         with st.spinner("Sedang menghitung GRU-PSO (5 Iterasi)... Mohon tunggu."):
@@ -263,9 +273,9 @@ if uploaded_file is not None:
         # Tampilkan Hasil Evaluasi Metrik
         st.subheader("Hasil Evaluasi Data Testing:")
         res_df = pd.DataFrame([{
-            'RMSE (Rp)': round(rmse_PSOSL, 2),
-            'MAE (Rp)': round(mae_PSOSL, 2),
-            'MAPE (%)': round(mape_PSOSL, 4)
+            'RMSE (Rp)': round(rmse, 2),
+            'MAE (Rp)': round(mae, 2),
+            'MAPE (%)': round(mape, 4)
         }])
         st.dataframe(res_df)
 
