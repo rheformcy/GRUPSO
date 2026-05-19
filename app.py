@@ -59,14 +59,18 @@ if uploaded_file is not None:
         data_features = _df_emas[feature_cols].values
         data_target = _df_emas[[target_col]].values
 
-        n = len(data_features)
+        values = emas[['Terakhir']].values
+        n = len(values)
         n_train = int(n * 0.8)
+        train_values = values[:n_train]
+        test_values  = values[n_train:]
         
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
         scaler_y = MinMaxScaler().fit(data_target[:n_train])
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
+        widnow=1
         def make_sequences(X_scaled, y_scaled, window=1):
             X_seq, y_seq = [], []
             for i in range(window, len(X_scaled)):
@@ -74,7 +78,7 @@ if uploaded_file is not None:
                 y_seq.append(y_scaled[i])
             return np.array(X_seq), np.array(y_seq)
     
-        X_seq_all, y_seq_all = make_sequences(Xs, ys, window=1)
+        X_seq_all, y_seq_all = make_sequences(Xs, ys, window=window)
         dtrain_end = n_train - 1
         X_train = X_seq_all[:dtrain_end]
         y_train = y_seq_all[:dtrain_end]
@@ -85,6 +89,10 @@ if uploaded_file is not None:
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
         # --- CONFIGURATION PARAMETER ---
+        SEED = 49
+        random.seed(SEED)
+        np.random.seed(SEED)
+        tf.random.set_seed(SEED)
         GS_epoch = 50
         GS_batch = 32
         GS_units = 16
@@ -95,10 +103,6 @@ if uploaded_file is not None:
         
         # --- FUNGSI BUILD MODEL (SINKRON SEED) ---
         def build_gru_model(units, layers, dropout, lr, window):
-            # Paksa clear session dan reset seed TEPAT di dalam fungsi sebelum model lahir
-            clear_session()
-            tf.random.set_seed(SEED)
-            
             n_features = 1
             model = Sequential()
             model.add(Input(shape=(window, n_features)))
