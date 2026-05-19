@@ -224,6 +224,9 @@ if uploaded_file is not None:
                             Dense(1)
                         ])
                         model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
+
+                        pso_early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+                        
                         model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
             
                         yv_pred = model.predict(X_va, verbose=0)
@@ -242,7 +245,7 @@ if uploaded_file is not None:
         # Parameter Iterasi & Partikel PSO dikunci aman untuk Localhost
         PSOSL_iters = 10
         optimizer = GlobalBestPSO(
-            n_particles=10, dimensions=4,
+            n_particles=20, dimensions=4,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
             bounds=([16, 0.0001, 16, 0.01], [128, 0.01, 128, 0.5])
         )
