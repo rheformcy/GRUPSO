@@ -134,7 +134,7 @@ if uploaded_file is not None:
                             Dense(1)
                         ])
                         model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
-                        model.fit(X_tr, y_tr, epochs=10, batch_size=batch, shuffle=False, verbose=0)
+                        model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
             
                         yv_pred = model.predict(X_va, verbose=0)
                         yv_pred_orig_PSOSL = scaler_y.inverse_transform(yv_pred).flatten()
@@ -225,15 +225,8 @@ if uploaded_file is not None:
         GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr_PSOSL), loss='mse')
         
         # Di sini kita masukkan validation_data secara manual, bukan pakai validation_split otomatis
-        history_final = GRU_PSOSL.fit(
-            X_train, y_train,
-            epochs=50,
-            batch_size=best_batch_PSOSL,
-            validation_data=(X_val_PSOSL, y_val_PSOSL),
-            shuffle=False,
-            verbose=1
-        )
-
+        history_final = GRU_PSOSL.fit(X_train, y_train, epochs=50, batch_size=best_batch_PSOSL, validation_split=0.2, shuffle=False, verbose=1)
+        
         # Evaluasi Akhir Test
         y_pred_PSOSL = GRU_PSOSL.predict(X_test, verbose=0)
         y_pred_orig_PSOSL = scaler_y.inverse_transform(y_pred_PSOSL).flatten()
