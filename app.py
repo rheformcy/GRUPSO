@@ -134,12 +134,11 @@ if uploaded_file is not None:
             batch_size=GS_batch,
             callbacks=[early_stop],
             validation_split=0.2,
-            verbose=1,
-            shuffle=False 
+            verbose=1 
         )
 
         # --- EVALUASI METRIK ---
-        y_pred_scaled = gru_standar.predict(X_test, verbose=0)
+        y_pred_scaled = gru_standar.predict(X_test)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
         y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         
