@@ -242,7 +242,7 @@ if uploaded_file is not None:
         # Parameter Iterasi & Partikel PSO dikunci aman untuk Localhost
         PSOSL_iters = 10
         optimizer = GlobalBestPSO(
-            n_particles=20, dimensions=4,
+            n_particles=10, dimensions=4,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
             bounds=([16, 0.0001, 16, 0.01], [128, 0.01, 128, 0.5])
         )
