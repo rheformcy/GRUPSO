@@ -118,8 +118,7 @@ if uploaded_file is not None:
             epochs=GS_epoch,
             batch_size=GS_batch,
             validation_split=0.2,
-            verbose=0,
-            shuffle=False 
+            verbose=0
         )
 
         # --- PROSES PREDIKSI DATA TESTING ---
