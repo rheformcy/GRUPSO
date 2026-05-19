@@ -22,7 +22,7 @@ import gc
 from pyswarms.single import GlobalBestPSO
 
 # ==========================================
-# 1. KUNCI ALL SEEDS DI AWAL SKRIP
+# 1. KUNCI ALL SEEDS DI AWAL SKRIP (SAMA PERSIS)
 # ==========================================
 def reset_seeds(seed=SEED):
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -54,12 +54,11 @@ if uploaded_file is not None:
     # ==========================================
     # 2. PROSES PEMODELAN DIKUNCI DI DALAM CACHE
     # ==========================================
-    # Fungsi ini hanya akan berjalan SATU KALI. Jika user klik tombol lain, 
-    # Streamlit akan mengambil hasilnya langsung dari memori tanpa run-ulang PSO.
-    
-    @st.cache_resource
-    def jalankan_pemodelan_pso_gru(_df_emas):
+    # Diubah ke cache_data agar aman menyimpan output list numerik murni tanpa crash graph Keras
+    @st.cache_data
+    def jalankan_gru_standar_pure(_df_emas):
         # Reset seed tepat sebelum pemrosesan data dimulai
+        clear_session()
         reset_seeds()
         
         # Penyiapan fitur
@@ -72,8 +71,6 @@ if uploaded_file is not None:
         values = _df_emas[['Terakhir']].values
         n = len(values)
         n_train = int(n * 0.8)
-        train_values = values[:n_train]
-        test_values  = values[n_train:]
 
         # Data Scaling
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
@@ -81,14 +78,12 @@ if uploaded_file is not None:
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
-        # Fungsi Windowing
+        # Fungsi Windowing Asli Kamu
         def make_sequences(X_scaled, y_scaled, window):
             X_seq, y_seq = [], []
-        
             for i in range(window, len(X_scaled)):
                 X_seq.append(X_scaled[i-window:i])
                 y_seq.append(y_scaled[i])
-        
             return np.array(X_seq), np.array(y_seq)
     
         # Windowing Data
@@ -108,9 +103,6 @@ if uploaded_file is not None:
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        print(f"Shape X_train: {X_train.shape}")
-        print(f"Shape X_test: {X_test.shape}")
-        
         # --- PARAMETER ARSITEKTUR ADAM STANDAR (DARI COLAB) ---
         GS_epoch = 50
         GS_batch = 32
@@ -127,18 +119,22 @@ if uploaded_file is not None:
         model_std.add(Dense(units=1, activation='linear'))
         model_std.compile(optimizer=Adam(learning_rate=GS_LR), loss='mse')
         
-        # SELESAI: Bagian callbacks=[early_stop] DIBUANG agar berjalan full 50 Epoch
+        # KUNCI UTAMA: shuffle=False dikembalikan agar urutan waktu konsisten seperti di Colab
         model_std.fit(
             X_train, y_train,
             epochs=GS_epoch,
             batch_size=GS_batch,
             validation_split=0.2,
-            verbose=0
+            verbose=0,
+            shuffle=False
         )
 
         # --- PROSES PREDIKSI DATA TESTING ---
         y_pred_scaled = model_std.predict(X_test, verbose=0)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
+        
+        # KUNCI KEDUA: Ambil data aktual via inverse transform sekuensial agar sejajar & anti-geser tanggal
+        y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         
         # Selaraskan ukuran array jika ada selisih efek pembulatan windowing
         min_len = min(len(y_test_inv), len(y_pred_inv))
@@ -150,15 +146,20 @@ if uploaded_file is not None:
         std_mae = mean_absolute_error(y_test_inv, y_pred_inv)
         std_mape = mean_absolute_percentage_error(y_test_inv, y_pred_inv) * 100
         
-        return GS_units, GS_LR, GS_batch, GS_dropout, std_rmse, std_mae, std_mape, y_test_inv, y_pred_inv
+        # Return dalam bentuk list numerik agar lolos standarisasi serialisasi cache Streamlit
+        return GS_units, GS_LR, GS_batch, GS_dropout, std_rmse, std_mae, std_mape, y_test_inv.tolist(), y_pred_inv.tolist()
 
     # ----------------------------------------------------
     # TOMBOL INTERFACE WEB STREAMLIT
     # ----------------------------------------------------
     if st.button("Mulai Pemrosesan Model Adam Standar"):
         with st.spinner("Sedang melatih model GRU full 50 epoch tanpa henti... Mohon tunggu."):
-            std_units, std_lr, std_batch, std_dropout, rmse_s, mae_s, mape_s, y_true_s, y_pred_s = jalankan_gru_standar_pure(emas)
+            std_units, std_lr, std_batch, std_dropout, rmse_s, mae_s, mape_s, y_true_list, y_pred_list = jalankan_gru_standar_pure(emas)
         st.success("Proses Training Selesai!")
+        
+        # Kembalikan tipe list dari cache ke numpy array untuk kebutuhan visualisasi plot grafik
+        y_true_s = np.array(y_true_list)
+        y_pred_s = np.array(y_pred_list)
         
         # Tampilkan Parameter Adam Standar
         st.subheader("Arsitektur & Hyperparameter Model (Adam Standar):")
