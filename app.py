@@ -134,7 +134,7 @@ if uploaded_file is not None:
                             Dense(1)
                         ])
                         model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
-                        model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
+                        model.fit(X_tr, y_tr, epochs=10, batch_size=batch, shuffle=False, verbose=0)
             
                         yv_pred = model.predict(X_va, verbose=0)
                         yv_pred_orig_PSOSL = scaler_y.inverse_transform(yv_pred).flatten()
