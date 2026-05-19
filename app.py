@@ -8,7 +8,7 @@ SEED = 49
 os.environ['PYTHONHASHSEED'] = str(SEED)
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Memaksa pakai CPU agar hitungan lokal vs server sinkron
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
 
 import tensorflow as tf
 import random
@@ -22,7 +22,6 @@ from keras.layers import Input, GRU, Dropout, Dense
 from keras.optimizers import Adam
 from keras.backend import clear_session
 
-# Fungsi global lock seed bawaan skrip asli kamu
 def reset_seeds(seed=SEED):
     os.environ['PYTHONHASHSEED'] = str(seed)
     random.seed(seed)
@@ -40,14 +39,12 @@ st.title("Aplikasi Prediksi Harga Emas GRU Standar (Optimizer Adam)")
 uploaded_file = st.file_uploader("Unggah File Data Emas (.csv atau .xlsx)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    # Membaca data dengan aman sesuai format
     if uploaded_file.name.endswith('.csv'):
         emas = pd.read_csv(uploaded_file)
     else:
         emas = pd.read_excel(uploaded_file)
         
     st.success("Data berhasil diunggah!")
-    st.info("Aplikasi berjalan dalam mode PURE TRAINING (Model dilatih langsung dari nol menggunakan Optimizer Adam Standar).")
 
     # Fungsi Windowing Bawaan Skrip Asli Kamu
     def make_sequences(X_scaled, y_scaled, window):
@@ -75,8 +72,6 @@ if uploaded_file is not None:
         values = _df_emas[['Terakhir']].values
         n = len(values)
         n_train = int(n * 0.8)
-        train_values = values[:n_train]
-        test_values  = values[n_train:]
 
         # Data Scaling
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
@@ -88,18 +83,19 @@ if uploaded_file is not None:
         window = 1
         X_seq_all, y_seq_all = make_sequences(Xs, ys, window)
         
-        # Split train-test
+        # Split train-test untuk urutan sequence
         dtrain_end = n_train - window
-        
         X_train = X_seq_all[:dtrain_end]
         y_train = y_seq_all[:dtrain_end]
-        
-        X_test = X_seq_all[dtrain_end:]
-        y_test = y_seq_all[dtrain_end:]
+        X_test  = X_seq_all[dtrain_end:]
         
         # Reshape untuk input GRU
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+        
+        # --- KUNCI PENYELAMAT: AMBIL DATA AKTUAL RUPIAH ASLI LANGSUNG ---
+        # Karena timestep = 1, urutan data aktual testing nilainya sama dengan data asli mulai dari indeks n_train
+        y_test_inv = values[n_train:].flatten()
         
         # --- PARAMETER ARSITEKTUR ADAM STANDAR (DARI COLAB) ---
         GS_epoch = 50
@@ -120,21 +116,27 @@ if uploaded_file is not None:
         from keras.callbacks import EarlyStopping
         early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
         
-        # Eksekusi training murni (shuffle=False wajib dikunci untuk data runut waktu)
+        # Eksekusi training murni
         model_std.fit(
             X_train, y_train,
             epochs=GS_epoch,
             batch_size=GS_batch,
             callbacks=[early_stop],
             validation_split=0.2,
-            verbose=0
+            verbose=0,
+            shuffle=False 
         )
 
         # --- PROSES PREDIKSI DATA TESTING ---
         y_pred_scaled = model_std.predict(X_test, verbose=0)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
-        y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         
+        # Jika panjang array selisih 1 baris akibat efek windowing data target, kita selaraskan ukurannya
+        min_len = min(len(y_test_inv), len(y_pred_inv))
+        y_test_inv = y_test_inv[:min_len]
+        y_pred_inv = y_pred_inv[:min_len]
+        
+        # Hitung Nilai Metrik Evaluasi dengan Skala Rupiah yang Sudah Selevel
         std_rmse = np.sqrt(mean_squared_error(y_test_inv, y_pred_inv))
         std_mae = mean_absolute_error(y_test_inv, y_pred_inv)
         std_mape = mean_absolute_percentage_error(y_test_inv, y_pred_inv) * 100
@@ -145,7 +147,7 @@ if uploaded_file is not None:
     # TOMBOL INTERFACE WEB STREAMLIT
     # ----------------------------------------------------
     if st.button("Mulai Pemrosesan Model Adam Standar"):
-        with st.spinner("Sedang melakukan training model GRU Adam Standar secara real-time... Mohon tunggu."):
+        with st.spinner("Sedang melakukan training model GRU Adam Standar... Mohon tunggu."):
             std_units, std_lr, std_batch, std_dropout, rmse_s, mae_s, mape_s, y_true_s, y_pred_s = jalankan_gru_standar_pure(emas)
         st.success("Proses Training Adam Standar Selesai!")
         
