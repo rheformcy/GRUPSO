@@ -5,10 +5,7 @@ import os
 
 # Set Seed Global tingkat atas agar deterministik sesuai Colab
 SEED = 49
-os.environ['PYTHONHASHSEED'] = str(SEED)
-os.environ["TF_DETERMINISTIC_OPS"] = "1"
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 tf.keras.utils.set_random_seed(SEED)
 tf.config.experimental.enable_op_determinism()
@@ -122,13 +119,11 @@ if uploaded_file is not None:
         # Bangun & latih model murni dari nol
         reset_seeds()
         gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
-        early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
-        
+      
         history = gru_standar.fit(
             X_train, y_train,
             epochs=GS_epoch,
             batch_size=GS_batch,
-            callbacks=[early_stop],
             validation_split=0.2,
             verbose=0  
         )
