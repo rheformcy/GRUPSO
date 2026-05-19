@@ -70,7 +70,7 @@ if uploaded_file is not None:
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
-        widnow=1
+        window=1
         def make_sequences(X_scaled, y_scaled, window=1):
             X_seq, y_seq = [], []
             for i in range(window, len(X_scaled)):
