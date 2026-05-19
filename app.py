@@ -125,12 +125,11 @@ if uploaded_file is not None:
             epochs=GS_epoch,
             batch_size=GS_batch,
             validation_split=0.2,
-            verbose=0,
-            shuffle=False
+            verbose=0
         )
 
         # --- PROSES PREDIKSI DATA TESTING ---
-        y_pred_scaled = model_std.predict(X_test, verbose=0)
+        y_pred_scaled = model_std.predict(X_test)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
         
         # KUNCI KEDUA: Ambil data aktual via inverse transform sekuensial agar sejajar & anti-geser tanggal
