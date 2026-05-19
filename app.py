@@ -234,7 +234,7 @@ if uploaded_file is not None:
         GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr_PSOSL), loss='mse')
         
         # Di sini kita masukkan validation_data secara manual, bukan pakai validation_split otomatis
-        history_final = GRU_PSOSL.fit(X_train, y_train, epochs=50, batch_size=best_batch_PSOSL, validation_split=0.2, shuffle=False, verbose=1)
+        history_final = GRU_PSOSL.fit(X_train, y_train, epochs=50, batch_size=best_batch_PSOSL, validation_split=0.2, verbose=1)
         
         # Evaluasi Akhir Test
         y_pred_PSOSL = GRU_PSOSL.predict(X_test, verbose=0)
