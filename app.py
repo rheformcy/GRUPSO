@@ -359,8 +359,8 @@ if uploaded_file is not None:
 
     # --- TOMBOL KANAN: MODEL OPTIMASI PSO ---
     with right_col:
-        st.subheader("2. Model Hybrid GRU - PSO")
-        st.write("Melakukan pencarian hyperparameter terbaik murni (40 Partikel, 10 Iterasi) di Lokal.")
+        st.subheader("2. Model GRU - PSO")
+        st.write("Melakukan pencarian hyperparameter terbaik dengan PSO.")
         if st.button("Mulai Optimasi & Prediksi PSO"):
             with st.spinner("Sedang menghitung GRU-PSO (10 Iterasi x 40 Partikel)... Mohon ditunggu!"):
                 u_p, lr_p, b_p, dr_p, rmse_p, mae_p, mape_p, y_true_p, y_pred_p = jalankan_pemodelan_pso_gru(emas)
