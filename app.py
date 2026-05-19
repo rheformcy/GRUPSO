@@ -330,7 +330,7 @@ if uploaded_file is not None:
     # --- TOMBOL KIRI: MODEL STANDAR ADAM ---
     with left_col:
         st.subheader("1. Model GRU - Adam")
-        st.write("Menjalankan training GRU dengan hyperparameter standar bawaan skripsi.")
+        st.write("Menjalankan training baseline model.")
         if st.button("Mulai Proses Training Adam"):
             with st.spinner("Sedang memproses GRU-Adam..."):
                 u_a, lr_a, b_a, rmse_a, mae_a, mape_a, y_true_a, y_pred_a = jalankan_training_adam(emas)
