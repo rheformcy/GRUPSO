@@ -129,7 +129,7 @@ if uploaded_file is not None:
             batch_size=GS_batch,
             callbacks=[early_stop],
             validation_split=0.2,
-            verbose=1,
+            verbose=1
         )
 
         # --- EVALUASI METRIK ---
