@@ -4,7 +4,6 @@ import random
 import os
 
 SEED = 49
-
 tf.keras.utils.set_random_seed(SEED)
 tf.config.experimental.enable_op_determinism()
 
@@ -26,15 +25,11 @@ from pyswarms.single import GlobalBestPSO
 # ==========================================
 def reset_seeds(seed=SEED):
     os.environ['PYTHONHASHSEED'] = str(seed)
-
     random.seed(seed)
     np.random.seed(seed)
-
     tf.random.set_seed(seed)
     tf.keras.utils.set_random_seed(seed)
-
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
     tf.config.experimental.enable_op_determinism()
 
 st.title("Aplikasi Prediksi Harga Emas GRU-PSO")
@@ -54,9 +49,6 @@ if uploaded_file is not None:
     # ==========================================
     # 2. PROSES PEMODELAN DIKUNCI DI DALAM CACHE
     # ==========================================
-    # Fungsi ini hanya akan berjalan SATU KALI. Jika user klik tombol lain, 
-    # Streamlit akan mengambil hasilnya langsung dari memori tanpa run-ulang PSO.
-    
     @st.cache_resource
     def jalankan_pemodelan_pso_gru(_df_emas):
         # Reset seed tepat sebelum pemrosesan data dimulai
@@ -72,9 +64,7 @@ if uploaded_file is not None:
         values = _df_emas[['Terakhir']].values
         n = len(values)
         n_train = int(n * 0.8)
-        train_values = values[:n_train]
-        test_values  = values[n_train:]
-
+        
         # Data Scaling
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
         scaler_y = MinMaxScaler().fit(data_target[:n_train])
@@ -84,11 +74,9 @@ if uploaded_file is not None:
         # Fungsi Windowing
         def make_sequences(X_scaled, y_scaled, window):
             X_seq, y_seq = [], []
-        
             for i in range(window, len(X_scaled)):
                 X_seq.append(X_scaled[i-window:i])
                 y_seq.append(y_scaled[i])
-        
             return np.array(X_seq), np.array(y_seq)
     
         # Windowing Data
@@ -97,10 +85,8 @@ if uploaded_file is not None:
         
         # Split train-test
         dtrain_end = n_train - window
-        
         X_train = X_seq_all[:dtrain_end]
         y_train = y_seq_all[:dtrain_end]
-        
         X_test = X_seq_all[dtrain_end:]
         y_test = y_seq_all[dtrain_end:]
         
@@ -108,9 +94,6 @@ if uploaded_file is not None:
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        print(f"Shape X_train: {X_train.shape}")
-        print(f"Shape X_test: {X_test.shape}")
-
         # Split manual 80:20 untuk Train & Validation Internal PSO
         val_PSOSL = 0.2
         n_tr_samples_PSOSL = X_train.shape[0]
@@ -132,9 +115,10 @@ if uploaded_file is not None:
                     batch = int(np.round(p[2]))
                     dropout = float(p[3])
                     try:
+                        # PENTING: Kunci seed internal TensorFlow di setiap partikel
                         tf.random.set_seed(49)
                         clear_session()
-
+                        
                         # Arsitektur GRU
                         model = Sequential([
                             Input(shape=(X_tr.shape[1], X_tr.shape[2])),
@@ -156,14 +140,10 @@ if uploaded_file is not None:
                 return costs
             return obj_fn
             
-        pso_obj_PSOSL = make_pso_obj(
-        X_tr_PSOSL, y_tr_PSOSL,
-        X_val_PSOSL, y_val_PSOSL,
-        scaler_y
-            )
+        pso_obj_PSOSL = make_pso_obj(X_tr_PSOSL, y_tr_PSOSL, X_val_PSOSL, y_val_PSOSL, scaler_y)
 
         # Konfigurasi & Inisialisasi PSO
-        PSOSL_iters=1
+        PSOSL_iters = 1
         optimizer = GlobalBestPSO(
             n_particles=40, dimensions=4,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
@@ -174,33 +154,25 @@ if uploaded_file is not None:
         optimizer.swarm.pbest_pos_PSOSL = optimizer.swarm.position.copy()
         optimizer.swarm.pbest_cost_PSOSL = np.full(n_particles, np.inf)
         
-        history_positions_PSOSL = []
-        history_velocity_PSOSL = []
-        history_costs_PSOSL = []
         history_gbest_cost_PSOSL = []
         history_gbest_pos_PSOSL = []
-        history_r1_PSOSL = []
-        history_r2_PSOSL = []
-
+        
         # Loop PSO Utama
         for it in range(PSOSL_iters):
-            # Evaluasi Fungsi Fitness
             costs_PSOSL = pso_obj_PSOSL(optimizer.swarm.position)
-            # Update pbest (Personal Best)
+            
             mask_PSOSL = costs_PSOSL < optimizer.swarm.pbest_cost_PSOSL
             optimizer.swarm.pbest_cost_PSOSL[mask_PSOSL] = costs_PSOSL[mask_PSOSL]
             optimizer.swarm.pbest_pos_PSOSL[mask_PSOSL] = optimizer.swarm.position[mask_PSOSL].copy()
-            # Update gbest (Global Best)
+            
             best_PSOSL = np.argmin(optimizer.swarm.pbest_cost_PSOSL)
             optimizer.swarm.best_cost_PSOSL = optimizer.swarm.pbest_cost_PSOSL[best_PSOSL]
             optimizer.swarm.best_pos_PSOSL = optimizer.swarm.pbest_pos_PSOSL[best_PSOSL].copy()
-            history_positions_PSOSL.append(optimizer.swarm.position.copy())
-            history_velocity_PSOSL.append(optimizer.swarm.velocity.copy())
-            history_costs_PSOSL.append(costs_PSOSL.copy())
+            
             history_gbest_cost_PSOSL.append(float(optimizer.swarm.best_cost_PSOSL))
             history_gbest_pos_PSOSL.append(optimizer.swarm.best_pos_PSOSL.copy())
-
-            # Update Velocity & Position manual (Disinkronkan benih acaknya)
+            
+            # Update acak disinkronkan dengan Colab
             r1 = np.random.rand(*optimizer.swarm.position.shape)
             r2 = np.random.rand(*optimizer.swarm.position.shape)
             optimizer.swarm.velocity = (
@@ -213,18 +185,15 @@ if uploaded_file is not None:
 
         # Ambil Hyperparameter Terbaik
         best_pos_PSOSL = history_gbest_pos_PSOSL[-1]
-        best_cost_PSOSL = history_gbest_cost_PSOSL[-1]
         best_units_PSOSL = int(np.round(best_pos_PSOSL[0]))
         best_lr_PSOSL = float(best_pos_PSOSL[1])
         best_batch_PSOSL = int(np.round(best_pos_PSOSL[2]))
         best_dropout_PSOSL = float(best_pos_PSOSL[3])
 
         # ========================================================
-        # PERUBAHAN KRUSIAL: SINKRONISASI VALIDATION SPLIT FINAL
+        # RETRAINING MODEL FINAL (SAMA DENGAN COLAB)
         # ========================================================
-        # Menggunakan data latih internal (X_tr_PSOSL) dan validasi internal (X_val_PSOSL) 
-        # secara eksplisit agar pembagian datanya 100% sama dengan saat proses pencarian PSO.
-        reset_seeds()
+        tf.random.set_seed(49)
         GRU_PSOSL = Sequential([
             Input(shape=(X_train.shape[1], X_train.shape[2])),
             GRU(units=best_units_PSOSL, activation='tanh'),
@@ -233,8 +202,14 @@ if uploaded_file is not None:
         ])
         GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr_PSOSL), loss='mse')
         
-        # Di sini kita masukkan validation_data secara manual, bukan pakai validation_split otomatis
-        history_final = GRU_PSOSL.fit(X_train, y_train, epochs=50, batch_size=best_batch_PSOSL, validation_split=0.2, verbose=1)
+        # PERBAIKAN: Parameter shuffle=False dihapus agar default (shuffle=True) sesuai Colab
+        history_final = GRU_PSOSL.fit(
+            X_train, y_train, 
+            epochs=50, 
+            batch_size=best_batch_PSOSL, 
+            validation_split=0.2, 
+            verbose=1
+        )
         
         # Evaluasi Akhir Test
         y_pred_PSOSL = GRU_PSOSL.predict(X_test, verbose=0)
@@ -244,9 +219,7 @@ if uploaded_file is not None:
         rmse_PSOSL = np.sqrt(mean_squared_error(y_test_orig_PSOSL, y_pred_orig_PSOSL))
         mae_PSOSL = mean_absolute_error(y_test_orig_PSOSL, y_pred_orig_PSOSL)
         mape_PSOSL = mean_absolute_percentage_error(y_test_orig_PSOSL, y_pred_orig_PSOSL) * 100
-        train_loss_PSOSL = history_final.history['loss'][-1]
-        val_loss_PSOSL = history_final.history['val_loss'][-1]
-        epoch_PSOSL = len(history_final.history['loss'])
+
         return (
             best_units_PSOSL,
             best_lr_PSOSL,
@@ -258,9 +231,10 @@ if uploaded_file is not None:
             y_test_orig_PSOSL,
             y_pred_orig_PSOSL
         )
+
     # Tombol pemicu eksekusi
     if st.button("Mulai Optimasi & Prediksi (Proses Berat)"):
-        with st.spinner("Sedang menghitung GRU-PSO (5 Iterasi)... Mohon tunggu."):
+        with st.spinner("Sedang menghitung GRU-PSO... Mohon tunggu."):
             units, lr, batch, dropout, rmse, mae, mape, y_true_plot, y_pred_plot = jalankan_pemodelan_pso_gru(emas)
             
         st.success("Proses Selesai!")
@@ -290,5 +264,4 @@ if uploaded_file is not None:
         ax.legend()
         ax.grid(True, alpha=0.3)
         
-        # Render grafik ke Streamlit
         st.pyplot(fig)
