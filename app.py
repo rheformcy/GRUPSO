@@ -102,7 +102,7 @@ if uploaded_file is not None:
         gru_standar.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
         
         # Memakai EarlyStopping bawaan kode Colab kamu
-        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
         
         history = gru_standar.fit(
             X_train, y_train,
