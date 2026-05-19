@@ -5,7 +5,6 @@ import os
 
 # Set Seed Global tingkat atas agar deterministik sesuai Colab
 SEED = 49
-os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 
 tf.keras.utils.set_random_seed(SEED)
 tf.config.experimental.enable_op_determinism()
