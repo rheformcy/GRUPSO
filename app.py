@@ -122,7 +122,7 @@ if uploaded_file is not None:
         # Bangun & latih model murni dari nol
         reset_seeds()
         gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
-        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
         
         history = gru_standar.fit(
             X_train, y_train,
