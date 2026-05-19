@@ -47,13 +47,13 @@ if uploaded_file is not None:
     st.info("Model berjalan menggunakan Optimizer Adam Standar (Baseline Model)")
 
     # ==========================================
-    # 2. FUNGSI MODEL GRU STANDAR (PREPRO KEMBARAN PSO)
+    # 2. FUNGSI MODEL GRU STANDAR (DENGAN DEF BUILD MODEL)
     # ==========================================
     @st.cache_resource
     def jalankan_gru_standar(_df_emas):
         reset_seeds()
         
-        # --- PRAPEMROSESAN DATA (MENGGUNAKAN LOGIKA PSO KAMU) ---
+        # --- PRAPEMROSESAN DATA (LOGIKA PSO) ---
         feature_cols = ["Terakhir"]
         target_col   = "Terakhir"
         data_features = _df_emas[feature_cols].values
@@ -84,25 +84,38 @@ if uploaded_file is not None:
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        # --- CONFIGURATION ARSITEKTUR GRU ---
+        # --- CONFIGURATION PARAMETER ---
         GS_epoch = 50
         GS_batch = 32
         GS_units = 16
         GS_layers = 1
         GS_dropout = 0.0
         GS_LR = 0.001
+        GS_window = 1
         
-        # Bersihkan graf memori Keras dan paksa seed tepat sebelum inisialisasi model
-        clear_session()
-        tf.random.set_seed(SEED)
+        # --- FUNGSI BUILD MODEL (SINKRON SEED) ---
+        def build_gru_model(units, layers, dropout, lr, window):
+            # Paksa clear session dan reset seed TEPAT di dalam fungsi sebelum model lahir
+            clear_session()
+            tf.random.set_seed(SEED)
+            
+            n_features = 1
+            model = Sequential()
+            model.add(Input(shape=(window, n_features)))
+            if layers == 1:
+                model.add(GRU(units=units, activation='tanh'))
+                model.add(Dropout(dropout))
+            else:
+                for i in range(layers):
+                    is_last = (i == layers - 1)
+                    model.add(GRU(units=units, return_sequences=not is_last, activation='tanh'))
+                    model.add(Dropout(dropout))
+            model.add(Dense(units=1, activation='linear'))
+            model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
+            return model
         
-        gru_standar = Sequential()
-        gru_standar.add(Input(shape=(1, 1))) # window=1, n_features=1
-        gru_standar.add(GRU(units=GS_units, activation='tanh'))
-        gru_standar.add(Dropout(GS_dropout))
-        gru_standar.add(Dense(units=1, activation='linear'))
-        
-        gru_standar.compile(optimizer=Adam(learning_rate=GS_LR), loss='mse')
+        # Panggil fungsi build model
+        gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
         
         # Early Stopping
         early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
@@ -114,7 +127,6 @@ if uploaded_file is not None:
             callbacks=[early_stop],
             validation_split=0.2,
             verbose=1,
-            shuffle=False # Dikunci agar urutan pakan data time series tidak teracak antar komputer
         )
 
         # --- EVALUASI METRIK ---
