@@ -123,7 +123,7 @@ if uploaded_file is not None:
         model_std.compile(optimizer=Adam(learning_rate=GS_LR), loss='mse')
         
         # SAKLEK COLAB: Pasang EarlyStopping & Biarkan Keras bawaan mengocok (TANPA shuffle=False)
-        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
         
         history = model_std.fit(
             X_train, y_train,
