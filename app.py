@@ -56,7 +56,7 @@ if uploaded_file is not None:
     )
 
     # ==========================================
-    # 2. FUNGSI MODEL GRU STANDAR (ADAM BATCH=32, UNITS=16)
+    # 2. FUNGSI MODEL GRU STANDAR (SINKRON DENGAN COLAB)
     # ==========================================
     @st.cache_resource
     def jalankan_gru_standar(_df_emas):
@@ -82,6 +82,7 @@ if uploaded_file is not None:
                 y_seq.append(y_scaled[i])
             return np.array(X_seq), np.array(y_seq)
     
+        # SINKRONISASI INDEKS DATA DATA TESTING
         X_seq_all, y_seq_all = make_sequences(Xs, ys, window=1)
         dtrain_end = n_train - 1
         X_train = X_seq_all[:dtrain_end]
@@ -92,7 +93,6 @@ if uploaded_file is not None:
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        # Parameter sesuai Google Colab Standar kamu
         GS_epoch = 50
         GS_batch = 32
         GS_units = 16
@@ -101,7 +101,7 @@ if uploaded_file is not None:
         GS_LR = 0.001
         GS_window = 1
         
-        # PERBAIKAN: Perbaikan jarak indentasi fungsi di bawah ini agar pas di dalam scope fungsi utama
+        # Menggunakan Fungsi Pembangun Model yang Sama Persis dengan Colab
         def build_gru_model(units, layers, dropout, lr, window):
             n_features = 1
             model = Sequential()
@@ -112,20 +112,16 @@ if uploaded_file is not None:
             else:
                 for i in range(layers):
                     is_last = (i == layers - 1)
-                    model.add(GRU(units=units,
-                                  return_sequences=not is_last,
-                                  activation='tanh'))
+                    model.add(GRU(units=units, return_sequences=not is_last, activation='tanh'))
                     model.add(Dropout(dropout))
             model.add(Dense(units=1, activation='linear'))
             model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
             return model
         
         gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
-        
-        # Memakai EarlyStopping bawaan kode Colab kamu
         early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
         
-        history = gru_standar.fit(
+        gru_standar.fit(
             X_train, y_train,
             epochs=GS_epoch,
             batch_size=GS_batch,
@@ -142,10 +138,10 @@ if uploaded_file is not None:
         mae = mean_absolute_error(y_test_inv, y_pred_inv)
         mape = mean_absolute_percentage_error(y_test_inv, y_pred_inv) * 100
         
-        return 16, 0.001, 32, 0.0, rmse, mae, mape, y_test_inv, y_pred_inv
+        return GS_units, GS_LR, GS_batch, GS_dropout, rmse, mae, mape, y_test_inv, y_pred_inv
 
     # ==========================================
-    # 3. FUNGSI MODEL GRU-PSO
+    # 3. FUNGSI MODEL GRU-PSO (SINKRON DATA SPLIT)
     # ==========================================
     @st.cache_resource
     def jalankan_pemodelan_pso_gru(_df_emas):
@@ -171,6 +167,7 @@ if uploaded_file is not None:
                 y_seq.append(y_scaled[i])
             return np.array(X_seq), np.array(y_seq)
     
+        # SINKRONISASI INDEKS DATA DATA TESTING UNTUK PSO
         X_seq_all, y_seq_all = make_sequences(Xs, ys, window=1)
         dtrain_end = n_train - 1
         X_train = X_seq_all[:dtrain_end]
@@ -206,7 +203,7 @@ if uploaded_file is not None:
                             Input(shape=(X_tr.shape[1], X_tr.shape[2])),
                             GRU(units=units, activation='tanh'),
                             Dropout(dropout),
-                            Dense(1)
+                            Dense(1, activation='linear')
                         ])
                         model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
                         model.fit(X_tr, y_tr, epochs=10, batch_size=batch, verbose=0)
@@ -271,7 +268,7 @@ if uploaded_file is not None:
             Input(shape=(X_train.shape[1], X_train.shape[2])),
             GRU(units=best_units_PSOSL, activation='tanh'),
             Dropout(best_dropout_PSOSL),
-            Dense(1)
+            Dense(1, activation='linear')
         ])
         GRU_PSOSL.compile(optimizer=Adam(learning_rate=best_lr_PSOSL), loss='mse')
         
