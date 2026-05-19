@@ -143,7 +143,7 @@ if uploaded_file is not None:
         pso_obj_PSOSL = make_pso_obj(X_tr_PSOSL, y_tr_PSOSL, X_val_PSOSL, y_val_PSOSL, scaler_y)
 
         # Konfigurasi & Inisialisasi PSO
-        PSOSL_iters = 1
+        PSOSL_iters = 10
         optimizer = GlobalBestPSO(
             n_particles=40, dimensions=4,
             options={'c1': 2.0, 'c2': 2.0, 'w': 0.7},
