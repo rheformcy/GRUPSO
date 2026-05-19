@@ -40,7 +40,7 @@ def reset_seeds(seed=SEED):
 
 # Layout Judul Aplikasi
 st.set_page_config(page_title="Prediksi Emas GRU Hybrid", layout="wide")
-st.title("📊 Aplikasi Perbandingan Prediksi Harga Emas: GRU-Adam vs GRU-PSO")
+st.title("Aplikasi Perbandingan Prediksi Harga Emas dengan Arsitektur GRU")
 st.write("Aplikasi komputasi Statistika untuk membandingkan model GRU Standar (Adam) dengan GRU yang dioptimasi Hyperparameternya menggunakan Particle Swarm Optimization (PSO).")
 
 # Input File dari User
