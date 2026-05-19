@@ -74,7 +74,7 @@ if uploaded_file is not None:
         scaler_y = MinMaxScaler().fit(data_target[:n_train])
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
-
+        
         def make_sequences(X_scaled, y_scaled, window=1):
             X_seq, y_seq = [], []
             for i in range(window, len(X_scaled)):
@@ -93,26 +93,47 @@ if uploaded_file is not None:
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
         # Parameter sesuai Google Colab Standar kamu
-        gru_standar = Sequential([
-            Input(shape=(1, 1)),
-            GRU(units=16, activation='tanh'),
-            Dropout(0.0),
-            Dense(1, activation='linear')
-        ])
-        gru_standar.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+        GS_epoch = 50
+        GS_batch = 32
+        GS_units = 16
+        GS_layers = 1
+        GS_dropout = 0.0
+        GS_LR = 0.001
+        GS_window = 1
+        
+        # PERBAIKAN: Perbaikan jarak indentasi fungsi di bawah ini agar pas di dalam scope fungsi utama
+        def build_gru_model(units, layers, dropout, lr, window):
+            n_features = 1
+            model = Sequential()
+            model.add(Input(shape=(window, n_features)))
+            if layers == 1:
+                model.add(GRU(units=units, activation='tanh'))
+                model.add(Dropout(dropout))
+            else:
+                for i in range(layers):
+                    is_last = (i == layers - 1)
+                    model.add(GRU(units=units,
+                                  return_sequences=not is_last,
+                                  activation='tanh'))
+                    model.add(Dropout(dropout))
+            model.add(Dense(units=1, activation='linear'))
+            model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
+            return model
+        
+        gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
         
         # Memakai EarlyStopping bawaan kode Colab kamu
-        early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
         
         history = gru_standar.fit(
             X_train, y_train,
-            epochs=50,
-            batch_size=32,
+            epochs=GS_epoch,
+            batch_size=GS_batch,
             callbacks=[early_stop],
             validation_split=0.2,
             verbose=1
         )
-        
+
         y_pred_scaled = gru_standar.predict(X_test, verbose=0)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
         y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
@@ -124,7 +145,7 @@ if uploaded_file is not None:
         return 16, 0.001, 32, 0.0, rmse, mae, mape, y_test_inv, y_pred_inv
 
     # ==========================================
-    # 3. FUNGSI MODEL GRU-PSO (SAMA SEPERTI SEBELUMNYA)
+    # 3. FUNGSI MODEL GRU-PSO
     # ==========================================
     @st.cache_resource
     def jalankan_pemodelan_pso_gru(_df_emas):
