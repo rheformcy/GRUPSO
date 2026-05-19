@@ -21,11 +21,11 @@ if uploaded_file is not None:
     st.success("Data berhasil diunggah!")
     
     st.subheader("Konfigurasi Model")
-    st.info("Aplikasi berjalan dalam mode Bobot Sinkron (Membangun arsitektur lokal dan menyuntikkan bobot eksak dari Colab)")
+    st.info("Aplikasi berjalan dalam mode Sinkronisasi Bobot (Membuat Scaler Lokal & Menyuntikkan Bobot .h5)")
 
-    # ==========================================
-    # FUNGSI UTAMA MODEL GRU STANDAR (WEIGHT INJECTION)
-    # ==========================================
+    # =========================================================
+    # FUNGSI UTAMA MODEL GRU STANDAR (TANPA JOBLIB)
+    # =========================================================
     @st.cache_resource
     def jalankan_gru_standar(_df_emas):
         from keras.models import Sequential, load_model
@@ -44,31 +44,32 @@ if uploaded_file is not None:
         n = len(values)
         n_train = int(n * 0.8)
         
+        # Membuat dan mengepas (fit) scaler lokal menggunakan porsi data training asli
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
         scaler_y = MinMaxScaler().fit(data_target[:n_train])
+        
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
+        # Membuat susunan sequence windowing (Timestep = 1)
         window = 1
-        def make_sequences(X_scaled, y_scaled, window=1):
-            X_seq, y_seq = [], []
-            for i in range(window, len(X_scaled)):
-                X_seq.append(X_scaled[i-window:i])
-                y_seq.append(y_scaled[i])
-            return np.array(X_seq), np.array(y_seq)
-    
-        X_seq_all, y_seq_all = make_sequences(Xs, ys, window=window)
+        X_seq, y_seq = [], []
+        for i in range(window, len(ys)):
+            X_seq.append(Xs[i-window:i])
+            y_seq.append(ys[i])
+        
+        X_seq_all, y_seq_all = np.array(X_seq), np.array(y_seq)
         dtrain_end = n_train - window
         
+        # Potong porsi data testing secara eksak
         X_test = X_seq_all[dtrain_end:]
         y_test = y_seq_all[dtrain_end:]
         X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        # --- 2. SOLUSI ERROR: BUAT STRUKTUR MODEL BARU & INJEKSI BOBOT ---
+        # --- 2. AMBIL ARSITEKTUR LOKAL & SUNTIK BOBOT .H5 COLAB ---
         nama_file_model = 'Best Model STD (TW) Timestep -- 1.h5'
-        
         if os.path.exists(nama_file_model):
-            # Pembuatan model kosong versi lokal Streamlit agar bebas dari TypeError
+            # Membangun struktur kosong standar di internal Streamlit
             gru_standar = Sequential()
             gru_standar.add(Input(shape=(window, 1)))
             gru_standar.add(GRU(units=16, activation='tanh'))
@@ -76,15 +77,14 @@ if uploaded_file is not None:
             gru_standar.add(Dense(units=1, activation='linear'))
             gru_standar.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
             
-            # Ambil bobot (weights) kasarnya saja dari file .h5 Colab, lalu tempel ke model lokal
+            # Ekstrak matriks bobot numerik dari berkas h5 tanpa menghiraukan konfigurasi versi layer Keras
             try:
                 model_colab = load_model(nama_file_model, compile=False)
                 gru_standar.set_weights(model_colab.get_weights())
             except Exception as load_err:
-                # Fallback cadangan jika format berkas keras/h5 sangat keras kepala
                 gru_standar.load_weights(nama_file_model, by_name=True, skip_mismatch=True)
         else:
-            st.error(f"File model '{nama_file_model}' tidak ditemukan di folder aplikasi!")
+            st.error(f"File model '{nama_file_model}' tidak ditemukan di folder aplikasi! Harap unduh berkas .h5 dari Google Drive skripsimu.")
             st.stop()
 
         # --- 3. PROSES PREDIKSI DATA TESTING ---
@@ -103,7 +103,7 @@ if uploaded_file is not None:
     # TOMBOL EKSEKUSI PADA INTERFACE WEB
     # ----------------------------------------------------
     if st.button("Mulai Pemrosesan Model Adam"):
-        with st.spinner("Sedang menyinkronkan bobot model GRU dan memprediksi data... Mohon tunggu."):
+        with st.spinner("Sedang memuat model dan memproses data... Mohon tunggu."):
             units, lr, batch, dropout, rmse, mae, mape, y_true_plot, y_pred_plot = jalankan_gru_standar(emas)
         st.success("Proses Evaluasi GRU Standar Selesai!")
         
@@ -115,7 +115,7 @@ if uploaded_file is not None:
         col3.metric("Batch Size", batch)
         col4.metric("Dropout", f"{dropout:.1f}")
         
-        # 2. Tampilkan Hasil Evaluasi Metrik yang Sudah Identik
+        # 2. Tampilkan Hasil Evaluasi Metrik
         st.subheader("Hasil Evaluasi Data Testing:")
         res_df = pd.DataFrame([{
             'RMSE (Rp)': round(rmse, 2),
@@ -129,7 +129,7 @@ if uploaded_file is not None:
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(y_true_plot, label='Harga Aktual', color='royalblue', linewidth=2)
         ax.plot(y_pred_plot, label='Harga Prediksi', color='crimson', linestyle='--', linewidth=2)
-        ax.set_title("Perbandingan Harga Aktual vs Prediksi (GRU Adam Standar - Fix Identik)")
+        ax.set_title("Perbandingan Harga Aktual vs Prediksi (GRU Adam Standar)")
         ax.legend()
         ax.grid(True, alpha=0.3)
         
