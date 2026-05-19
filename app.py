@@ -1,68 +1,68 @@
 import streamlit as st
-import os
-
-# ====================================================================
-# SAKRAL: WAJIB DI ATAS TENSORFLOW UNTUK MENGUNCI SEED DETERMINISTIK
-# ====================================================================
-SEED = 49
-os.environ['PYTHONHASHSEED'] = str(SEED)
-os.environ["TF_DETERMINISTIC_OPS"] = "1"
-os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
-
 import tensorflow as tf
 import random
-import numpy as np
+import os
+
+SEED = 49
+
+tf.keras.utils.set_random_seed(SEED)
+tf.config.experimental.enable_op_determinism()
+
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 from keras.models import Sequential
 from keras.layers import Input, GRU, Dropout, Dense
 from keras.optimizers import Adam
 from keras.backend import clear_session
+import gc
+from pyswarms.single import GlobalBestPSO
 
+# ==========================================
+# 1. KUNCI ALL SEEDS DI AWAL SKRIP
+# ==========================================
 def reset_seeds(seed=SEED):
     os.environ['PYTHONHASHSEED'] = str(seed)
+
     random.seed(seed)
     np.random.seed(seed)
+
     tf.random.set_seed(seed)
     tf.keras.utils.set_random_seed(seed)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    if hasattr(tf.config.experimental, 'enable_op_determinism'):
-        tf.config.experimental.enable_op_determinism()
 
-st.set_page_config(page_title="Prediksi Harga Emas GRU Standar", layout="wide")
-st.title("Aplikasi Prediksi Harga Emas GRU Standar (Tanpa Early Stopping)")
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+    tf.config.experimental.enable_op_determinism()
+
+st.title("Aplikasi Prediksi Harga Emas GRU-ADAM")
 
 # Input File dari User
 uploaded_file = st.file_uploader("Unggah File Data Emas (.csv atau .xlsx)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
+    # Membaca data dengan aman
     if uploaded_file.name.endswith('.csv'):
         emas = pd.read_csv(uploaded_file)
     else:
         emas = pd.read_excel(uploaded_file)
         
     st.success("Data berhasil diunggah!")
-
-    # Fungsi Windowing Bawaan Skrip Asli Kamu
-    def make_sequences(X_scaled, y_scaled, window):
-        X_seq, y_seq = [], []
-        for i in range(window, len(X_scaled)):
-            X_seq.append(X_scaled[i-window:i])
-            y_seq.append(y_scaled[i])
-        return np.array(X_seq), np.array(y_seq)
-
-    # ====================================================================
-    # FUNGSI UTAMA: PROSES TRAINING 50 EPOCH FULL TANPA EARLY STOPPING
-    # ====================================================================
+    
+    # ==========================================
+    # 2. PROSES PEMODELAN DIKUNCI DI DALAM CACHE
+    # ==========================================
+    # Fungsi ini hanya akan berjalan SATU KALI. Jika user klik tombol lain, 
+    # Streamlit akan mengambil hasilnya langsung dari memori tanpa run-ulang PSO.
+    
     @st.cache_resource
-    def jalankan_gru_standar_pure(_df_emas):
-        clear_session()
+    def jalankan_pemodelan_pso_gru(_df_emas):
+        # Reset seed tepat sebelum pemrosesan data dimulai
         reset_seeds()
         
-        # --- PRAPEMROSESAN DATA (100% COPY-PASTE DARI SYNTAX KAMU) ---
+        # Penyiapan fitur
         feature_cols = ["Terakhir"]
         target_col   = "Terakhir"
         data_features = _df_emas[feature_cols].values
@@ -72,6 +72,8 @@ if uploaded_file is not None:
         values = _df_emas[['Terakhir']].values
         n = len(values)
         n_train = int(n * 0.8)
+        train_values = values[:n_train]
+        test_values  = values[n_train:]
 
         # Data Scaling
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
@@ -79,22 +81,35 @@ if uploaded_file is not None:
         Xs = scaler_X.transform(data_features)
         ys = scaler_y.transform(data_target)
 
-        # Windowing Data (Timestep = 1)
+        # Fungsi Windowing
+        def make_sequences(X_scaled, y_scaled, window):
+            X_seq, y_seq = [], []
+        
+            for i in range(window, len(X_scaled)):
+                X_seq.append(X_scaled[i-window:i])
+                y_seq.append(y_scaled[i])
+        
+            return np.array(X_seq), np.array(y_seq)
+    
+        # Windowing Data
         window = 1
         X_seq_all, y_seq_all = make_sequences(Xs, ys, window)
         
-        # Split train-test untuk urutan sequence
+        # Split train-test
         dtrain_end = n_train - window
+        
         X_train = X_seq_all[:dtrain_end]
         y_train = y_seq_all[:dtrain_end]
-        X_test  = X_seq_all[dtrain_end:]
+        
+        X_test = X_seq_all[dtrain_end:]
+        y_test = y_seq_all[dtrain_end:]
         
         # Reshape untuk input GRU
         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
         X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        # Data Aktual Rupiah Asli Langsung dari indeks n_train
-        y_test_inv = values[n_train:].flatten()
+        print(f"Shape X_train: {X_train.shape}")
+        print(f"Shape X_test: {X_test.shape}")
         
         # --- PARAMETER ARSITEKTUR ADAM STANDAR (DARI COLAB) ---
         GS_epoch = 50
