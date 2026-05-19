@@ -229,7 +229,8 @@ if uploaded_file is not None:
             X_train, y_train,
             epochs=50,
             batch_size=best_batch_PSOSL,
-            validation_data=(X_val_PSOSL, y_val_PSOSL), 
+            validation_data=(X_val_PSOSL, y_val_PSOSL),
+            shuffle=False,
             verbose=1
         )
 
