@@ -1,9 +1,15 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import tensorflow as tf
 import random
 import os
+
+SEED = 49
+
+tf.keras.utils.set_random_seed(SEED)
+tf.config.experimental.enable_op_determinism()
+
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler
@@ -18,15 +24,18 @@ from pyswarms.single import GlobalBestPSO
 # ==========================================
 # 1. KUNCI ALL SEEDS DI AWAL SKRIP
 # ==========================================
-SEED = 49
 def reset_seeds(seed=SEED):
     os.environ['PYTHONHASHSEED'] = str(seed)
+
     random.seed(seed)
     np.random.seed(seed)
-    tf.random.set_seed(seed)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Paksa CPU agar math-ops konsisten
 
-reset_seeds()
+    tf.random.set_seed(seed)
+    tf.keras.utils.set_random_seed(seed)
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+    tf.config.experimental.enable_op_determinism()
 
 st.title("Aplikasi Prediksi Harga Emas GRU-PSO")
 
@@ -215,7 +224,7 @@ if uploaded_file is not None:
         # ========================================================
         # Menggunakan data latih internal (X_tr_PSOSL) dan validasi internal (X_val_PSOSL) 
         # secara eksplisit agar pembagian datanya 100% sama dengan saat proses pencarian PSO.
-        tf.random.set_seed(SEED)
+        reset_seeds()
         GRU_PSOSL = Sequential([
             Input(shape=(X_train.shape[1], X_train.shape[2])),
             GRU(units=best_units_PSOSL, activation='tanh'),
