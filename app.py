@@ -1,5 +1,8 @@
 import streamlit as st
 import tensorflow as tf
+import pandas as pd  # <-- Ini dia yang tadi ketinggalan!
+import numpy as np
+import matplotlib.pyplot as plt
 import random
 import os
 
@@ -36,8 +39,6 @@ if uploaded_file is not None:
     # ==========================================
     @st.cache_resource
     def jalankan_gru_standar(_df_emas):
-        # Reset seed di awal fungsi pembungkus
-        import numpy as np
         from sklearn.preprocessing import MinMaxScaler
         from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
         from keras.models import Sequential
