@@ -1,45 +1,15 @@
 import streamlit as st
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 import os
 
-# --- LANGKAH CRITICAL 1: SET ENVIRONMENT VARIABLES SEBELUM TENSORFLOW DI-IMPORT ---
-# Ini wajib ditaruh di paling atas skrip agar TensorFlow patuh sejak awal lahir.
-SEED = 49
-os.environ['PYTHONHASHSEED'] = str(SEED)
-os.environ["TF_DETERMINISTIC_OPS"] = "1"
-os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Memaksa Streamlit memakai CPU standar agar sama dengan CPU hitungan lokal
-
-import tensorflow as tf
-import random
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# --- LANGKAH CRITICAL 2: KUNCI ALL SEEDS DI LEVEL GLOBAL ---
-random.seed(SEED)
-np.random.seed(SEED)
-tf.random.set_seed(SEED)
-tf.keras.utils.set_random_seed(SEED)
-if hasattr(tf.config.experimental, 'enable_op_determinism'):
-    tf.config.experimental.enable_op_determinism()
-
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
-from keras.models import Sequential
-from keras.layers import Input, GRU, Dropout, Dense
-from keras.optimizers import Adam
-from keras.callbacks import EarlyStopping
-from keras.backend import clear_session
-
-# Fungsi pembantu untuk reset ulang seed saat rerun fungsi Streamlit
-def reset_seeds_local():
-    random.seed(SEED)
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
-    tf.keras.utils.set_random_seed(SEED)
+st.set_page_config(page_title="Prediksi Harga Emas GRU Standar", layout="wide")
 
 st.title("Aplikasi Prediksi Harga Emas GRU Standar")
 
+# Input File dari User
 uploaded_file = st.file_uploader("Unggah File Data Emas (.csv atau .xlsx)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
@@ -49,19 +19,20 @@ if uploaded_file is not None:
         emas = pd.read_excel(uploaded_file)
         
     st.success("Data berhasil diunggah!")
+    
     st.subheader("Konfigurasi Model")
-    st.info("Model berjalan menggunakan Optimizer Adam Standar (Baseline Model)")
+    st.info("Aplikasi berjalan dalam mode Inference (Memuat bobot terbaik .h5 langsung dari Google Colab)")
 
     # ==========================================
-    # 2. FUNGSI UTAMA TRAINING GRU STANDAR
+    # FUNGSI UTAMA MODEL GRU STANDAR (LOAD MODEL .H5)
     # ==========================================
     @st.cache_resource
     def jalankan_gru_standar(_df_emas):
-        # Bersihkan session memori sisa rerun sebelumnya dan tegaskan seed kembali
-        clear_session()
-        reset_seeds_local()
+        from keras.models import load_model
+        from sklearn.preprocessing import MinMaxScaler
+        from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
         
-        # --- PRAPEMROSESAN DATA (LOGIKA KEMBARAN COLAB) ---
+        # --- 1. PRAPEMROSESAN DATA (LOGIKA KEMBAR IDENTIK DENGAN COLAB) ---
         feature_cols = ["Terakhir"]
         target_col   = "Terakhir"
         data_features = _df_emas[feature_cols].values
@@ -71,6 +42,7 @@ if uploaded_file is not None:
         n = len(values)
         n_train = int(n * 0.8)
         
+        # Fit scaler menggunakan data training agar bobot transformasi klop
         scaler_X = MinMaxScaler().fit(data_features[:n_train])
         scaler_y = MinMaxScaler().fit(data_target[:n_train])
         Xs = scaler_X.transform(data_features)
@@ -87,94 +59,66 @@ if uploaded_file is not None:
         X_seq_all, y_seq_all = make_sequences(Xs, ys, window=window)
         dtrain_end = n_train - window
         
-        X_train = X_seq_all[:dtrain_end]
-        y_train = y_seq_all[:dtrain_end]
+        # Ambil porsi data testing (X_test & y_test)
         X_test = X_seq_all[dtrain_end:]
         y_test = y_seq_all[dtrain_end:]
+        X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
         
-        X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
-        X_test  = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+        # --- 2. PROSES PEMANGGILAN FILE .H5 DARI COLAB ---
+        # Nama file disesuaikan dengan 'path_model_checkpoint' di Colab-mu
+        nama_file_model = 'Best Model STD (TW) Timestep -- 1.h5'
         
-        # --- INITIALIZATION PARAMETER ---
-        GS_epoch = 50
-        GS_batch = 32
-        GS_units = 16
-        GS_layers = 1
-        GS_dropout = 0.0
-        GS_LR = 0.001
-        GS_window = 1
-        
-        # --- FUNGSI BUILD MODEL (STRUKTUR REVISI BERSIH) ---
-        def build_gru_model(units, layers, dropout, lr, window):
-            n_features = 1
-            model = Sequential()
-            model.add(Input(shape=(window, n_features)))
-            if layers == 1:
-                model.add(GRU(units=units, activation='tanh'))
-                model.add(Dropout(dropout))
-            else:
-                for i in range(layers):
-                    is_last = (i == layers - 1)
-                    model.add(GRU(units=units, return_sequences=not is_last, activation='tanh'))
-                    model.add(Dropout(dropout))
-            model.add(Dense(units=1, activation='linear'))
-            model.compile(optimizer=Adam(learning_rate=lr), loss='mse')
-            return model
-        
-        # Eksekusi pembuatan model secara linear setelah seed ditegaskan ulang
-        reset_seeds_local()
-        gru_standar = build_gru_model(GS_units, GS_layers, GS_dropout, GS_LR, GS_window)
-        
-        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
-        
-        # Eksekusi Fit dengan mematikan pengacakan (shuffle=False)
-        gru_standar.fit(
-            X_train, y_train,
-            epochs=GS_epoch,
-            batch_size=GS_batch,
-            callbacks=[early_stop],
-            validation_split=0.2,
-            verbose=1 
-        )
+        if os.path.exists(nama_file_model):
+            gru_standar = load_model(nama_file_model)
+        else:
+            st.error(f"File model '{nama_file_model}' tidak ditemukan di folder aplikasi! Harap unduh dari Google Drive dan masukkan ke folder yang sama dengan skrip ini.")
+            st.stop()
 
-        # --- EVALUASI METRIK ---
-        y_pred_scaled = gru_standar.predict(X_test)
+        # --- 3. PROSES PREDIKSI DATA TESTING ---
+        y_pred_scaled = gru_standar.predict(X_test, verbose=0)
         y_pred_inv = scaler_y.inverse_transform(y_pred_scaled).flatten()
         y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         
+        # Hitung Nilai Metrik Evaluasi Akhir
         rmse = np.sqrt(mean_squared_error(y_test_inv, y_pred_inv))
         mae = mean_absolute_error(y_test_inv, y_pred_inv)
         mape = mean_absolute_percentage_error(y_test_inv, y_pred_inv) * 100
         
-        return GS_units, GS_LR, GS_batch, GS_dropout, rmse, mae, mape, y_test_inv, y_pred_inv
+        # Mengembalikan parameter arsitektur skripsi beserta hasil evaluasinya
+        return 16, 0.001, 32, 0.0, rmse, mae, mape, y_test_inv, y_pred_inv
 
     # ----------------------------------------------------
-    # TOMBOL INTERFACE
+    # TOMBOL EKSEKUSI PADA INTERFACE WEB
     # ----------------------------------------------------
     if st.button("Mulai Pemrosesan Model Adam"):
-        with st.spinner("Sedang melatih model GRU Standar dengan Adam... Mohon tunggu."):
+        with st.spinner("Sedang memuat otak model GRU dan memprediksi data... Mohon tunggu."):
             units, lr, batch, dropout, rmse, mae, mape, y_true_plot, y_pred_plot = jalankan_gru_standar(emas)
-        st.success("Eksekusi GRU Standar Selesai!")
+        st.success("Proses Evaluasi GRU Standar Selesai!")
         
-        st.subheader("Arsitektur & Hyperparameter Model:")
+        # 1. Tampilkan Arsitektur Model ke Interface Web
+        st.subheader("Arsitektur & Hyperparameter Model (Sesuai Buku Skripsi):")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Units GRU", units)
-        col2.metric("Learning Rate", f"{lr:.6f}")
+        col2.metric("Learning Rate", f"{lr:.3f}")
         col3.metric("Batch Size", batch)
-        col4.metric("Dropout", f"{dropout:.4f}")
+        col4.metric("Dropout", f"{dropout:.1f}")
         
+        # 2. Tampilkan Hasil Evaluasi Metrik yang Sudah Identik
         st.subheader("Hasil Evaluasi Data Testing:")
         res_df = pd.DataFrame([{
             'RMSE (Rp)': round(rmse, 2),
             'MAE (Rp)': round(mae, 2),
             'MAPE (%)': round(mape, 4)
         }])
-        st.dataframe(res_df)
+        st.dataframe(res_df, use_container_width=True)
 
+        # 3. Plot Hasil Perbandingan ke Interface Web
+        st.subheader("Visualisasi Grafik Prediksi")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(y_true_plot, label='Harga Aktual', color='royalblue', linewidth=2)
         ax.plot(y_pred_plot, label='Harga Prediksi', color='crimson', linestyle='--', linewidth=2)
-        ax.set_title("Perbandingan Harga Aktual vs Prediksi (GRU Adam Standar)")
+        ax.set_title("Perbandingan Harga Aktual vs Prediksi (GRU Adam Standar - Fix Identik)")
         ax.legend()
         ax.grid(True, alpha=0.3)
+        
         st.pyplot(fig)
